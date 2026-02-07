@@ -3,7 +3,7 @@
 The Order Service handles business logic and data management for orders via gRPC.
 
 ## Prerequisites
-- **Go**: Version 1.20 or higher. [Install Go](https://go.dev/doc/install)
+- **Go**: Version 1.23 or higher. [Install Go](https://go.dev/doc/install)
 - **Protobuf Compiler (`protoc`)**: For generating gRPC code.
 - **Go Plugins for protoc**:
   ```bash

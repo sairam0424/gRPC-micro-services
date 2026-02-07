@@ -1,6 +1,6 @@
 module github.com/sairam0424/gRPC-micro-services/order-service
 
-go 1.25.7
+go 1.24.0
 
 require google.golang.org/grpc v1.78.0
 
