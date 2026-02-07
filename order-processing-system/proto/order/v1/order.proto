@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package order.v1;
 
-option go_package = "github.com/sairamugge/order-processing/order/v1;orderv1";
+option go_package = "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1;orderv1";
 
 // OrderService handles all order-related operations.
 service OrderService {

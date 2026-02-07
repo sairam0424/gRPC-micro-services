@@ -11,7 +11,7 @@ sys.path.append(GENERATED_DIR)
 
 from order.v1 import order_pb2, order_pb2_grpc
 
-app = FastAPI(title="Order Processing API Gateway")
+app = FastAPI(title="Order Processing API Gateway", root_path="/api")
 
 # Configuration
 ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_ADDR", "localhost:50051")
@@ -56,6 +56,25 @@ async def create_order(request: CreateOrderRequest):
             return {
                 "order_id": response.order_id,
                 "status": order_pb2.OrderStatus.Name(response.status)
+            }
+    except grpc.RpcError as e:
+        raise HTTPException(status_code=503, detail=f"Order Service unavailable: {e.details()}")
+
+@app.get("/orders")
+async def list_orders(customer_id: str = None):
+    try:
+        with get_grpc_channel() as channel:
+            stub = order_pb2_grpc.OrderServiceStub(channel)
+            rpc_request = order_pb2.ListOrdersRequest(customer_id=customer_id or "")
+            response = stub.ListOrders(rpc_request)
+            return {
+                "orders": [
+                    {
+                        "order_id": order.order_id,
+                        "customer_id": order.customer_id,
+                        "status": order_pb2.OrderStatus.Name(order.status)
+                    } for order in response.orders
+                ]
             }
     except grpc.RpcError as e:
         raise HTTPException(status_code=503, detail=f"Order Service unavailable: {e.details()}")
