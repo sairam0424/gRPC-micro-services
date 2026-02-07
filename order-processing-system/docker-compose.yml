@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  order-service:
+    build:
+      context: ./order-service
+    ports:
+      - "50051:50051"
+    networks:
+      - grpc-net
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    ports:
+      - "8000:8000"
+    environment:
+      - ORDER_SERVICE_ADDR=order-service:50051
+    depends_on:
+      - order-service
+    networks:
+      - grpc-net
+
+networks:
+  grpc-net:
+    driver: bridge
