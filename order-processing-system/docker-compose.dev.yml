@@ -1,17 +1,17 @@
-version: '3.8'
 
 services:
   order-service:
     build:
       context: ./order-service
       dockerfile: Dockerfile
+      target: builder
     volumes:
       - ./order-service:/app
     ports:
       - "50051:50051"
     # Overriding CMD to use air for hot-reloading
     # Note: Requires air to be installed in the image or run via go run
-    command: sh -c "go install github.com/cosmtrek/air@latest && air -c .air.toml"
+    command: sh -c "go install github.com/air-verse/air@latest && air -c .air.toml"
     networks:
       - grpc-net
 
@@ -23,12 +23,35 @@ services:
       - ./api-gateway/src:/app/src
     environment:
       - ORDER_SERVICE_ADDR=order-service:50051
-    ports:
-      - "8000:8000"
     # Using uvicorn with --reload for hot-reloading
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - order-service
+    networks:
+      - grpc-net
+
+  web-client:
+    build:
+      context: ./web-client
+    volumes:
+      - ./web-client:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    depends_on:
+      - api-gateway
+    networks:
+      - grpc-net
+
+  proxy:
+    image: nginx:alpine
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - api-gateway
+      - web-client
     networks:
       - grpc-net
 
