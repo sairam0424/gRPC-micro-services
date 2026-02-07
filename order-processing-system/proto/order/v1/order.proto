@@ -5,6 +5,22 @@ package order.v1;
 option go_package = "github.com/sairamugge/order-processing/order/v1;orderv1";
 
 import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Order Processing Service"
+    version: "1.0"
+    description: "Industy-standard Order Management API powered by gRPC-Gateway and Go."
+    contact: {
+      name: "Sairam Ugge"
+      url: "https://github.com/sairam0424"
+    }
+  }
+  schemes: HTTP
+  consumes: "application/json"
+  produces: "application/json"
+};
 
 // OrderService handles all order-related operations.
 service OrderService {

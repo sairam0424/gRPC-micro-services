@@ -42,10 +42,18 @@ This service implements a dual-mode server:
 - **gRPC**: Listening on `:50051`.
 - **REST Gateway**: Listening on `:8080` (mapped via `grpc-gateway`).
 
-### Swagger UI
+### Swagger UI (Built-in)
 Documentation and interactive Testing:
 - **URL**: `http://localhost:8080/swagger/`
 - **JSON Spec**: `http://localhost:8080/swagger/order.swagger.json`
+
+### Viewing Docs with go-swagger (Recommended)
+You can use the `swagger` tool for a full-featured documentation viewer:
+```bash
+# Serve the documentation
+export PATH=$PATH:$(go env GOPATH)/bin
+swagger serve order-service/pkg/generated/proto/order/v1/order.swagger.json
+```
 
 ### REST Endpoints
 - `GET /v1/orders/{order_id}` - Get order by ID.

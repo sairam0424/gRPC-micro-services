@@ -12,13 +12,18 @@ generate:
 	@echo "Generating Go gRPC code..."
 	mkdir -p order-service/pkg/generated
 	# Note: We need google/api/annotations.proto and http.proto
-	# Industry best practice is to have these in an 'include' or 'third_party' folder
+	# Also need protoc-gen-openapiv2 options
+	export PATH=$$PATH:$$(go env GOPATH)/bin && \
 	protoc -I. -I/usr/local/include \
 	    --go_out=order-service/pkg/generated --go_opt=paths=source_relative \
 	    --go-grpc_out=order-service/pkg/generated --go-grpc_opt=paths=source_relative \
 	    --grpc-gateway_out=order-service/pkg/generated --grpc-gateway_opt=paths=source_relative \
 	    --openapiv2_out=order-service/pkg/generated \
 	    proto/order/v1/order.proto
+	
+	@echo "Validating OpenAPI spec with go-swagger..."
+	export PATH=$$PATH:$$(go env GOPATH)/bin && \
+	swagger validate order-service/pkg/generated/proto/order/v1/order.swagger.json
 
 clean:
 	rm -rf api-gateway/src/generated/*

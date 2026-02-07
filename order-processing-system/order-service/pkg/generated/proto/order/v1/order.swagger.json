@@ -1,13 +1,21 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "proto/order/v1/order.proto",
-    "version": "version not set"
+    "title": "Order Processing Service",
+    "description": "Industy-standard Order Management API powered by gRPC-Gateway and Go.",
+    "version": "1.0",
+    "contact": {
+      "name": "Sairam Ugge",
+      "url": "https://github.com/sairam0424"
+    }
   },
   "tags": [
     {
       "name": "OrderService"
     }
+  ],
+  "schemes": [
+    "http"
   ],
   "consumes": [
     "application/json"

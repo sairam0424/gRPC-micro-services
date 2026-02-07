@@ -7,6 +7,7 @@
 package orderv1
 
 import (
+	_ "github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2/options"
 	_ "google.golang.org/genproto/googleapis/api/annotations"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -446,7 +447,7 @@ var File_proto_order_v1_order_proto protoreflect.FileDescriptor
 
 const file_proto_order_v1_order_proto_rawDesc = "" +
 	"\n" +
-	"\x1aproto/order/v1/order.proto\x12\border.v1\x1a\x1cgoogle/api/annotations.proto\"`\n" +
+	"\x1aproto/order/v1/order.proto\x12\border.v1\x1a\x1cgoogle/api/annotations.proto\x1a.protoc-gen-openapiv2/options/annotations.proto\"`\n" +
 	"\x12CreateOrderRequest\x12\x1f\n" +
 	"\vcustomer_id\x18\x01 \x01(\tR\n" +
 	"customerId\x12)\n" +
@@ -484,7 +485,9 @@ const file_proto_order_v1_order_proto_rawDesc = "" +
 	"\bGetOrder\x12\x19.order.v1.GetOrderRequest\x1a\x1a.order.v1.GetOrderResponse\"\x1d\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/orders/{order_id}\x12[\n" +
 	"\n" +
 	"ListOrders\x12\x1b.order.v1.ListOrdersRequest\x1a\x1c.order.v1.ListOrdersResponse\"\x12\x82\xd3\xe4\x93\x02\f\x12\n" +
-	"/v1/ordersB9Z7github.com/sairamugge/order-processing/order/v1;orderv1b\x06proto3"
+	"/v1/ordersB\xfb\x01\x92A\xbe\x01\x12\x94\x01\n" +
+	"\x18Order Processing Service\x12EIndusty-standard Order Management API powered by gRPC-Gateway and Go.\",\n" +
+	"\vSairam Ugge\x12\x1dhttps://github.com/sairam04242\x031.0*\x01\x012\x10application/json:\x10application/jsonZ7github.com/sairamugge/order-processing/order/v1;orderv1b\x06proto3"
 
 var (
 	file_proto_order_v1_order_proto_rawDescOnce sync.Once
