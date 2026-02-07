@@ -6,9 +6,9 @@ PROTOC_GEN_GO_GRPC := $(shell which protoc-gen-go-grpc)
 generate:
 	@echo "Generating Python gRPC code..."
 	mkdir -p api-gateway/src/generated
-	python -m grpc_tools.protoc -Iproto -I. -I/usr/local/include -I/opt/homebrew/include \
-	    --python_out=api-gateway/src/generated --grpc_python_out=api-gateway/src/generated \
-	    proto/order/v1/order.proto
+	cd api-gateway && ./venv/bin/python -m grpc_tools.protoc -I../proto -I.. -I/usr/local/include -I/opt/homebrew/include \
+	    --python_out=src/generated --grpc_python_out=src/generated \
+	    ../proto/order/v1/order.proto
 	touch api-gateway/src/generated/__init__.py
 	
 	@echo "Generating Go gRPC code..."

@@ -1,0 +1,6 @@
+# Run make generate from the order-processing-system directory:
+cd order-processing-system
+make generate
+
+# NOT from the parent directory:
+# cd "gRPC test"  # ❌ Wrong!
