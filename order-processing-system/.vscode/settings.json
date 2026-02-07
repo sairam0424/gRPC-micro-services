@@ -8,6 +8,15 @@
       "-I/opt/homebrew/include"
     ]
   },
+  "protoc.options": [
+    "--proto_path=${workspaceFolder}/proto",
+    "--proto_path=${workspaceFolder}"
+  ],
+  "protoc.path": "protoc",
+  "vscode-proto3.protoc.options": [
+    "--proto_path=${workspaceFolder}/proto",
+    "--proto_path=${workspaceFolder}"
+  ],
   "clangd.arguments": [
     "-I${workspaceFolder}/proto"
   ],

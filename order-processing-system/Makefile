@@ -14,12 +14,18 @@ generate:
 	@echo "Generating Go gRPC code..."
 	mkdir -p order-service/pkg/generated
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \
-	protoc -Iproto -I. -I/usr/local/include -I/opt/homebrew/include \
-	    --go_out=order-service/pkg/generated --go_opt=paths=source_relative \
-	    --go-grpc_out=order-service/pkg/generated --go-grpc_opt=paths=source_relative \
-	    --grpc-gateway_out=order-service/pkg/generated --grpc-gateway_opt=paths=source_relative \
-	    --openapiv2_out=order-service/pkg/generated \
-	    proto/order/v1/order.proto
+		protoc \
+		-Iproto \
+		-I. \
+		-I/usr/local/include \
+		-I/opt/homebrew/include \
+		-I$$(go env GOPATH)/pkg/mod \
+		--go_out=order-service/pkg/generated --go_opt=paths=source_relative \
+		--go-grpc_out=order-service/pkg/generated --go-grpc_opt=paths=source_relative \
+		--grpc-gateway_out=order-service/pkg/generated --grpc-gateway_opt=paths=source_relative \
+		--openapiv2_out=order-service/pkg/generated \
+		proto/order/v1/order.proto
+
 	
 	@echo "Validating OpenAPI spec with go-swagger..."
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \

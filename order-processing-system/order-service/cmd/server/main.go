@@ -10,7 +10,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	pb "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/proto/order/v1"
+	pb "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1"
 )
 
 type server struct {
@@ -78,7 +78,7 @@ func main() {
 	
 	// Serve the swagger JSON
 	httpMux.HandleFunc("/swagger/order.swagger.json", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "./pkg/generated/proto/order/v1/order.swagger.json")
+		http.ServeFile(w, r, "./pkg/generated/order/v1/order.swagger.json")
 	})
 
 	// Simple Swagger UI redirect or embedded link
