@@ -11,7 +11,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
   info: {
     title: "Order Processing Service"
     version: "1.0"
-    description: "Industy-standard Order Management API powered by gRPC-Gateway and Go."
+    description: "Industry-standard Order Management API powered by gRPC-Gateway and Go."
     contact: {
       name: "Sairam Ugge"
       url: "https://github.com/sairam0424"
@@ -24,6 +24,7 @@ option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
 
 // OrderService handles all order-related operations.
 service OrderService {
+  // CreateOrder creates a new order in the system.
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse) {
     option (google.api.http) = {
       post: "/v1/orders"
@@ -31,12 +32,14 @@ service OrderService {
     };
   }
   
+  // GetOrder retrieves an order by its unique identifier.
   rpc GetOrder(GetOrderRequest) returns (GetOrderResponse) {
     option (google.api.http) = {
       get: "/v1/orders/{order_id}"
     };
   }
   
+  // ListOrders returns a list of orders for a specific customer.
   rpc ListOrders(ListOrdersRequest) returns (ListOrdersResponse) {
     option (google.api.http) = {
       get: "/v1/orders"
@@ -53,20 +56,24 @@ enum OrderStatus {
   ORDER_STATUS_CANCELLED = 4;
 }
 
+// CreateOrderRequest is the request message for creating a new order.
 message CreateOrderRequest {
   string customer_id = 1;
   repeated OrderItem items = 2;
 }
 
+// CreateOrderResponse is the response message after order creation.
 message CreateOrderResponse {
   string order_id = 1;
   OrderStatus status = 2;
 }
 
+// GetOrderRequest is the request message for retrieving an order.
 message GetOrderRequest {
   string order_id = 1;
 }
 
+// GetOrderResponse is the detailed response for an order retrieval.
 message GetOrderResponse {
   string order_id = 1;
   string customer_id = 2;
@@ -74,14 +81,17 @@ message GetOrderResponse {
   OrderStatus status = 4;
 }
 
+// ListOrdersRequest is the request message for listing orders of a customer.
 message ListOrdersRequest {
   string customer_id = 1;
 }
 
+// ListOrdersResponse contains the list of orders for the customer.
 message ListOrdersResponse {
   repeated GetOrderResponse orders = 1;
 }
 
+// OrderItem represents a single product item in an order.
 message OrderItem {
   string product_id = 1;
   int32 quantity = 2;

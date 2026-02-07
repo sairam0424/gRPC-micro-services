@@ -11,10 +11,8 @@ generate:
 	
 	@echo "Generating Go gRPC code..."
 	mkdir -p order-service/pkg/generated
-	# Note: We need google/api/annotations.proto and http.proto
-	# Also need protoc-gen-openapiv2 options
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \
-	protoc -I. -I/usr/local/include \
+	protoc -Iproto -I. -I/usr/local/include \
 	    --go_out=order-service/pkg/generated --go_opt=paths=source_relative \
 	    --go-grpc_out=order-service/pkg/generated --go-grpc_opt=paths=source_relative \
 	    --grpc-gateway_out=order-service/pkg/generated --grpc-gateway_opt=paths=source_relative \
