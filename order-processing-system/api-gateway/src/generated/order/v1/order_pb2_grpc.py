@@ -3,7 +3,7 @@
 import grpc
 import warnings
 
-from proto.order.v1 import order_pb2 as proto_dot_order_dot_v1_dot_order__pb2
+from order.v1 import order_pb2 as order_dot_v1_dot_order__pb2
 
 GRPC_GENERATED_VERSION = '1.78.0'
 GRPC_VERSION = grpc.__version__
@@ -18,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in proto/order/v1/order_pb2_grpc.py depends on'
+        + ' but the generated code in order/v1/order_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -37,18 +37,18 @@ class OrderServiceStub(object):
         """
         self.CreateOrder = channel.unary_unary(
                 '/order.v1.OrderService/CreateOrder',
-                request_serializer=proto_dot_order_dot_v1_dot_order__pb2.CreateOrderRequest.SerializeToString,
-                response_deserializer=proto_dot_order_dot_v1_dot_order__pb2.CreateOrderResponse.FromString,
+                request_serializer=order_dot_v1_dot_order__pb2.CreateOrderRequest.SerializeToString,
+                response_deserializer=order_dot_v1_dot_order__pb2.CreateOrderResponse.FromString,
                 _registered_method=True)
         self.GetOrder = channel.unary_unary(
                 '/order.v1.OrderService/GetOrder',
-                request_serializer=proto_dot_order_dot_v1_dot_order__pb2.GetOrderRequest.SerializeToString,
-                response_deserializer=proto_dot_order_dot_v1_dot_order__pb2.GetOrderResponse.FromString,
+                request_serializer=order_dot_v1_dot_order__pb2.GetOrderRequest.SerializeToString,
+                response_deserializer=order_dot_v1_dot_order__pb2.GetOrderResponse.FromString,
                 _registered_method=True)
         self.ListOrders = channel.unary_unary(
                 '/order.v1.OrderService/ListOrders',
-                request_serializer=proto_dot_order_dot_v1_dot_order__pb2.ListOrdersRequest.SerializeToString,
-                response_deserializer=proto_dot_order_dot_v1_dot_order__pb2.ListOrdersResponse.FromString,
+                request_serializer=order_dot_v1_dot_order__pb2.ListOrdersRequest.SerializeToString,
+                response_deserializer=order_dot_v1_dot_order__pb2.ListOrdersResponse.FromString,
                 _registered_method=True)
 
 
@@ -57,19 +57,22 @@ class OrderServiceServicer(object):
     """
 
     def CreateOrder(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """CreateOrder creates a new order in the system.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetOrder(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """GetOrder retrieves an order by its unique identifier.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ListOrders(self, request, context):
-        """Missing associated documentation comment in .proto file."""
+        """ListOrders returns a list of orders for a specific customer.
+        """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
@@ -79,18 +82,18 @@ def add_OrderServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'CreateOrder': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateOrder,
-                    request_deserializer=proto_dot_order_dot_v1_dot_order__pb2.CreateOrderRequest.FromString,
-                    response_serializer=proto_dot_order_dot_v1_dot_order__pb2.CreateOrderResponse.SerializeToString,
+                    request_deserializer=order_dot_v1_dot_order__pb2.CreateOrderRequest.FromString,
+                    response_serializer=order_dot_v1_dot_order__pb2.CreateOrderResponse.SerializeToString,
             ),
             'GetOrder': grpc.unary_unary_rpc_method_handler(
                     servicer.GetOrder,
-                    request_deserializer=proto_dot_order_dot_v1_dot_order__pb2.GetOrderRequest.FromString,
-                    response_serializer=proto_dot_order_dot_v1_dot_order__pb2.GetOrderResponse.SerializeToString,
+                    request_deserializer=order_dot_v1_dot_order__pb2.GetOrderRequest.FromString,
+                    response_serializer=order_dot_v1_dot_order__pb2.GetOrderResponse.SerializeToString,
             ),
             'ListOrders': grpc.unary_unary_rpc_method_handler(
                     servicer.ListOrders,
-                    request_deserializer=proto_dot_order_dot_v1_dot_order__pb2.ListOrdersRequest.FromString,
-                    response_serializer=proto_dot_order_dot_v1_dot_order__pb2.ListOrdersResponse.SerializeToString,
+                    request_deserializer=order_dot_v1_dot_order__pb2.ListOrdersRequest.FromString,
+                    response_serializer=order_dot_v1_dot_order__pb2.ListOrdersResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -119,8 +122,8 @@ class OrderService(object):
             request,
             target,
             '/order.v1.OrderService/CreateOrder',
-            proto_dot_order_dot_v1_dot_order__pb2.CreateOrderRequest.SerializeToString,
-            proto_dot_order_dot_v1_dot_order__pb2.CreateOrderResponse.FromString,
+            order_dot_v1_dot_order__pb2.CreateOrderRequest.SerializeToString,
+            order_dot_v1_dot_order__pb2.CreateOrderResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -146,8 +149,8 @@ class OrderService(object):
             request,
             target,
             '/order.v1.OrderService/GetOrder',
-            proto_dot_order_dot_v1_dot_order__pb2.GetOrderRequest.SerializeToString,
-            proto_dot_order_dot_v1_dot_order__pb2.GetOrderResponse.FromString,
+            order_dot_v1_dot_order__pb2.GetOrderRequest.SerializeToString,
+            order_dot_v1_dot_order__pb2.GetOrderResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -173,8 +176,8 @@ class OrderService(object):
             request,
             target,
             '/order.v1.OrderService/ListOrders',
-            proto_dot_order_dot_v1_dot_order__pb2.ListOrdersRequest.SerializeToString,
-            proto_dot_order_dot_v1_dot_order__pb2.ListOrdersResponse.FromString,
+            order_dot_v1_dot_order__pb2.ListOrdersRequest.SerializeToString,
+            order_dot_v1_dot_order__pb2.ListOrdersResponse.FromString,
             options,
             channel_credentials,
             insecure,

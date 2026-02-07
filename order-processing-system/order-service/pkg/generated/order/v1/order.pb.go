@@ -79,6 +79,7 @@ func (OrderStatus) EnumDescriptor() ([]byte, []int) {
 	return file_order_v1_order_proto_rawDescGZIP(), []int{0}
 }
 
+// CreateOrderRequest is the request message for creating a new order.
 type CreateOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CustomerId    string                 `protobuf:"bytes,1,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
@@ -131,6 +132,7 @@ func (x *CreateOrderRequest) GetItems() []*OrderItem {
 	return nil
 }
 
+// CreateOrderResponse is the response message after order creation.
 type CreateOrderResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -183,6 +185,7 @@ func (x *CreateOrderResponse) GetStatus() OrderStatus {
 	return OrderStatus_ORDER_STATUS_UNSPECIFIED
 }
 
+// GetOrderRequest is the request message for retrieving an order.
 type GetOrderRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -227,6 +230,7 @@ func (x *GetOrderRequest) GetOrderId() string {
 	return ""
 }
 
+// GetOrderResponse is the detailed response for an order retrieval.
 type GetOrderResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	OrderId       string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -295,6 +299,7 @@ func (x *GetOrderResponse) GetStatus() OrderStatus {
 	return OrderStatus_ORDER_STATUS_UNSPECIFIED
 }
 
+// ListOrdersRequest is the request message for listing orders of a customer.
 type ListOrdersRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CustomerId    string                 `protobuf:"bytes,1,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
@@ -339,6 +344,7 @@ func (x *ListOrdersRequest) GetCustomerId() string {
 	return ""
 }
 
+// ListOrdersResponse contains the list of orders for the customer.
 type ListOrdersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Orders        []*GetOrderResponse    `protobuf:"bytes,1,rep,name=orders,proto3" json:"orders,omitempty"`
@@ -383,6 +389,7 @@ func (x *ListOrdersResponse) GetOrders() []*GetOrderResponse {
 	return nil
 }
 
+// OrderItem represents a single product item in an order.
 type OrderItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
@@ -485,8 +492,8 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"\bGetOrder\x12\x19.order.v1.GetOrderRequest\x1a\x1a.order.v1.GetOrderResponse\"\x1d\x82\xd3\xe4\x93\x02\x17\x12\x15/v1/orders/{order_id}\x12[\n" +
 	"\n" +
 	"ListOrders\x12\x1b.order.v1.ListOrdersRequest\x1a\x1c.order.v1.ListOrdersResponse\"\x12\x82\xd3\xe4\x93\x02\f\x12\n" +
-	"/v1/ordersB\xfb\x01\x92A\xbe\x01\x12\x94\x01\n" +
-	"\x18Order Processing Service\x12EIndusty-standard Order Management API powered by gRPC-Gateway and Go.\",\n" +
+	"/v1/ordersB\xfc\x01\x92A\xbf\x01\x12\x95\x01\n" +
+	"\x18Order Processing Service\x12FIndustry-standard Order Management API powered by gRPC-Gateway and Go.\",\n" +
 	"\vSairam Ugge\x12\x1dhttps://github.com/sairam04242\x031.0*\x01\x012\x10application/json:\x10application/jsonZ7github.com/sairamugge/order-processing/order/v1;orderv1b\x06proto3"
 
 var (

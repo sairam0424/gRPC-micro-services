@@ -1,0 +1,11 @@
+{
+  "protoc": {
+    "path": "protoc",
+    "compile_flags": [
+      "-Iproto",
+      "-I.",
+      "-I/usr/local/include",
+      "-I/opt/homebrew/include"
+    ]
+  }
+}

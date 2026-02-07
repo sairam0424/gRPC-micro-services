@@ -2,7 +2,7 @@
   "swagger": "2.0",
   "info": {
     "title": "Order Processing Service",
-    "description": "Industy-standard Order Management API powered by gRPC-Gateway and Go.",
+    "description": "Industry-standard Order Management API powered by gRPC-Gateway and Go.",
     "version": "1.0",
     "contact": {
       "name": "Sairam Ugge",
@@ -26,6 +26,7 @@
   "paths": {
     "/v1/orders": {
       "get": {
+        "summary": "ListOrders returns a list of orders for a specific customer.",
         "operationId": "OrderService_ListOrders",
         "responses": {
           "200": {
@@ -54,6 +55,7 @@
         ]
       },
       "post": {
+        "summary": "CreateOrder creates a new order in the system.",
         "operationId": "OrderService_CreateOrder",
         "responses": {
           "200": {
@@ -72,6 +74,7 @@
         "parameters": [
           {
             "name": "body",
+            "description": "CreateOrderRequest is the request message for creating a new order.",
             "in": "body",
             "required": true,
             "schema": {
@@ -86,6 +89,7 @@
     },
     "/v1/orders/{orderId}": {
       "get": {
+        "summary": "GetOrder retrieves an order by its unique identifier.",
         "operationId": "OrderService_GetOrder",
         "responses": {
           "200": {
@@ -157,7 +161,8 @@
             "$ref": "#/definitions/v1OrderItem"
           }
         }
-      }
+      },
+      "description": "CreateOrderRequest is the request message for creating a new order."
     },
     "v1CreateOrderResponse": {
       "type": "object",
@@ -168,7 +173,8 @@
         "status": {
           "$ref": "#/definitions/v1OrderStatus"
         }
-      }
+      },
+      "description": "CreateOrderResponse is the response message after order creation."
     },
     "v1GetOrderResponse": {
       "type": "object",
@@ -189,7 +195,8 @@
         "status": {
           "$ref": "#/definitions/v1OrderStatus"
         }
-      }
+      },
+      "description": "GetOrderResponse is the detailed response for an order retrieval."
     },
     "v1ListOrdersResponse": {
       "type": "object",
@@ -201,7 +208,8 @@
             "$ref": "#/definitions/v1GetOrderResponse"
           }
         }
-      }
+      },
+      "description": "ListOrdersResponse contains the list of orders for the customer."
     },
     "v1OrderItem": {
       "type": "object",
@@ -217,7 +225,8 @@
           "type": "number",
           "format": "double"
         }
-      }
+      },
+      "description": "OrderItem represents a single product item in an order."
     },
     "v1OrderStatus": {
       "type": "string",

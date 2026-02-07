@@ -30,8 +30,11 @@ const (
 //
 // OrderService handles all order-related operations.
 type OrderServiceClient interface {
+	// CreateOrder creates a new order in the system.
 	CreateOrder(ctx context.Context, in *CreateOrderRequest, opts ...grpc.CallOption) (*CreateOrderResponse, error)
+	// GetOrder retrieves an order by its unique identifier.
 	GetOrder(ctx context.Context, in *GetOrderRequest, opts ...grpc.CallOption) (*GetOrderResponse, error)
+	// ListOrders returns a list of orders for a specific customer.
 	ListOrders(ctx context.Context, in *ListOrdersRequest, opts ...grpc.CallOption) (*ListOrdersResponse, error)
 }
 
@@ -79,8 +82,11 @@ func (c *orderServiceClient) ListOrders(ctx context.Context, in *ListOrdersReque
 //
 // OrderService handles all order-related operations.
 type OrderServiceServer interface {
+	// CreateOrder creates a new order in the system.
 	CreateOrder(context.Context, *CreateOrderRequest) (*CreateOrderResponse, error)
+	// GetOrder retrieves an order by its unique identifier.
 	GetOrder(context.Context, *GetOrderRequest) (*GetOrderResponse, error)
+	// ListOrders returns a list of orders for a specific customer.
 	ListOrders(context.Context, *ListOrdersRequest) (*ListOrdersResponse, error)
 	mustEmbedUnimplementedOrderServiceServer()
 }
