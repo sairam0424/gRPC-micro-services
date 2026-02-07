@@ -7,9 +7,11 @@ This project is an industry-standard scaffolding for gRPC microservice communica
 The system follows a modern microservices architecture:
 - **API Gateway (Python)**: Handles RESTful requests and internal gRPC communication.
 - **Order Service (Go)**: Manages business logic for orders.
+- **Web Client (Next.js)**: Modern dashboard for managing orders.
+- **Nginx Proxy**: Single entry point handling routing and security.
 - **gRPC/Protobuf**: Used for efficient, typesafe internal communication.
 
-For details, see [docs/architecture.md](./docs/architecture.md).
+For details, see [docs/architecture.md](./docs/architecture.md) and [docs/frontend_integration.md](./docs/frontend_integration.md).
 
 ## Quick Start (Docker)
 
@@ -24,7 +26,9 @@ cd gRPC-micro-services/order-processing-system
 docker-compose up --build
 ```
 
-Access the API Gateway at `http://localhost:8000`.
+Access the **Web Dashboard** at `http://localhost`.
+Access the **API Gateway** via proxy at `http://localhost/api/`.
+Access the **Swagger UI** for Go service at `http://localhost/swagger/`.
 
 ## Local Development Setup
 
