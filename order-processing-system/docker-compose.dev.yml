@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  order-service:
+    build:
+      context: ./order-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./order-service:/app
+    ports:
+      - "50051:50051"
+    # Overriding CMD to use air for hot-reloading
+    # Note: Requires air to be installed in the image or run via go run
+    command: sh -c "go install github.com/cosmtrek/air@latest && air -c .air.toml"
+    networks:
+      - grpc-net
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    volumes:
+      - ./api-gateway/src:/app/src
+    environment:
+      - ORDER_SERVICE_ADDR=order-service:50051
+    ports:
+      - "8000:8000"
+    # Using uvicorn with --reload for hot-reloading
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      - order-service
+    networks:
+      - grpc-net
+
+networks:
+  grpc-net:
+    driver: bridge

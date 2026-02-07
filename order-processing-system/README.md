@@ -44,12 +44,28 @@ Refer to individual service READMEs for detailed instructions:
 - [API Gateway (Python)](./api-gateway/README.md)
 - [Order Service (Go)](./order-service/README.md)
 
+### Build and Run (Standard Mode)
+```bash
+docker-compose up --build
+```
+
+### Build and Run (Development Mode / Watch Mode)
+This mode enables hot-reloading for both Python and Go services.
+```bash
+docker-compose -f docker-compose.dev.yml up --build
+```
+
+---
+
 ## Makefile Commands
 - `make generate`: Generates gRPC stubs from proto files.
 - `make clean`: Removes generated files.
-- `make up`: Starts services using Docker Compose.
+- `make up`: Starts services using Docker Compose. 
+- `make up-dev`: Starts services in development mode (hot-reloading).
 - `make down`: Stops Docker Compose services.
 
+---
+
 ## Project Standards
-- **Protobuf Style**: Follows [Google Protobuf Style Guide](./docs/protobuf_style_guide.md).
-- **Structure**: Uses standard industry layouts (`src` for Python, `cmd/internal` for Go).
+- **Proto Style**: Follows [Protobuf Style Guide](docs/protobuf_style_guide.md).
+- **Service Layout**: Adheres to language-specific best practices (`src` for Python, standard Go layout for Go).

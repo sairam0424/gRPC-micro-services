@@ -58,9 +58,44 @@ From the `api-gateway` directory:
 docker build -t api-gateway .
 ```
 
-### 2. Run the Container
+### 2. Run the Container (Standard Mode)
 ```bash
 docker run -p 8000:8000 api-gateway
+```
+
+### 3. Run in Watch Mode (Hot-Reloading)
+From the **project root**, run:
+```bash
+docker-compose -f docker-compose.dev.yml up api-gateway
+```
+*Changes to `src/` will trigger an automatic reload.*
+
+---
+
+## Advanced Docker Commands
+
+### View Logs
+```bash
+# Follow logs in real-time
+docker logs -f [container_id_or_name]
+```
+
+### Interactive Shell
+```bash
+# Access the container's shell
+docker exec -it [container_id_or_name] /bin/sh
+```
+
+### Lifecycle Management
+```bash
+# Stop a container
+docker stop [container_id_or_name]
+
+# Remove a container
+docker rm [container_id_or_name]
+
+# List running containers
+docker ps
 ```
 
 ## Troubleshooting
