@@ -2,6 +2,7 @@ FROM python:3.10-slim as builder
 
 WORKDIR /app
 COPY pyproject.toml .
+COPY src/ ./src/
 RUN pip install --no-cache-dir .
 
 FROM python:3.10-slim
