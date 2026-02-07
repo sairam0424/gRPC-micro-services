@@ -21,7 +21,7 @@ export default function Dashboard() {
     try {
       // In a real app, we'd fetch actual orders. 
       // For now, let's mock or fetch from the gateway if available.
-      const response = await fetch("/api/orders/mock-list");
+      const response = await fetch("/api/orders");
       if (response.ok) {
         const data = await response.json();
         setOrders(data.orders || []);
