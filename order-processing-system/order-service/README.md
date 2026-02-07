@@ -36,6 +36,29 @@ go run cmd/server/main.go
 
 ---
 
+## API Documentation and REST Gateway
+
+This service implements a dual-mode server:
+- **gRPC**: Listening on `:50051`.
+- **REST Gateway**: Listening on `:8080` (mapped via `grpc-gateway`).
+
+### Swagger UI
+Documentation and interactive Testing:
+- **URL**: `http://localhost:8080/swagger/`
+- **JSON Spec**: `http://localhost:8080/swagger/order.swagger.json`
+
+### REST Endpoints
+- `GET /v1/orders/{order_id}` - Get order by ID.
+- `GET /v1/orders` - List all orders.
+- `POST /v1/orders` - Create a new order.
+
+Example `curl`:
+```bash
+curl http://localhost:8080/v1/orders/123
+```
+
+---
+
 ## Docker Setup
 
 ### 1. Build the Image
