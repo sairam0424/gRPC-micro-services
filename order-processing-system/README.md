@@ -6,9 +6,11 @@ This project is an industry-standard scaffolding for gRPC microservice communica
 
 The system follows a modern microservices architecture:
 - **API Gateway (Python)**: Handles RESTful requests and internal gRPC communication.
-- **Order Service (Go)**: Manages business logic for orders.
-- **Web Client (Next.js)**: Modern dashboard for managing orders.
+- **Order Service (Go)**: Manages business logic and coordinates with Inventory.
+- **Inventory Service (Python)**: Manages product stock with PostgreSQL persistence.
+- **Web Client (Next.js)**: Modern dashboard for managing orders and stock.
 - **Nginx Proxy**: Single entry point handling routing and security.
+- **PostgreSQL**: Reliable storage for inventory and stock management.
 - **gRPC/Protobuf**: Used for efficient, typesafe internal communication.
 
 For details, see [docs/architecture.md](./docs/architecture.md) and [docs/frontend_integration.md](./docs/frontend_integration.md).
@@ -61,10 +63,17 @@ docker-compose -f docker-compose.dev.yml up --build
 
 ---
 
+## Neon Setup
+1.  **Environment Setup**: Create a `.env` file in the root directory (based on the Neon credentials provided).
+2.  **Generate Stubs**: Run `make all` to generate gRPC code.
+3.  **Start Services**: Run `docker compose up --build`.
+
+---
+
 ## Makefile Commands
 - `make generate`: Generates gRPC stubs from proto files.
 - `make clean`: Removes generated files.
-- `make up`: Starts services using Docker Compose. 
+- `make up`: Starts services using Docker Compose.
 - `make up-dev`: Starts services in development mode (hot-reloading).
 - `make down`: Stops Docker Compose services.
 
