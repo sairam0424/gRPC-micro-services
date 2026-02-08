@@ -7,7 +7,7 @@ This guide provides instructions on how to manage your database using the Neon W
 The Neon Web Console is the easiest way to view your tables and run queries.
 
 1.  **Login**: Go to [console.neon.tech](https://console.neon.tech).
-2.  **Select Project**: Choose the project containing your database (e.g., `ep-holy-block-a15z3e4p`).
+2.  **Select Project**: Choose your project (e.g., `your-neon-project`).
 3.  **Data Editor**: 
     - Click on **"SQL Editor"** in the left sidebar to run custom queries.
     - Click on **"Tables"** to browse your schema and view data in the `inventory` table.
@@ -22,11 +22,11 @@ If you prefer a desktop tool like pgAdmin, follow these steps:
     - Right-click "Servers" > "Register" > "Server...".
     - **General Tab**: Name it "Neon PostgreSQL".
     - **Connection Tab**:
-        - **Host**: `ep-holy-block-a15z3e4p-pooler.ap-southeast-1.aws.neon.tech`
+        - **Host**: `<your-project-id>-pooler.<region>.aws.neon.tech`
         - **Port**: `5432`
         - **Maintenance database**: `neondb`
         - **Username**: `neondb_owner`
-        - **Password**: `npg_Fj6bG0DcStVr`
+        - **Password**: `<your-password>`
     - **Parameters Tab**:
         - Add a new row: Name: `sslmode`, Value: `require`.
 3.  **Save**: Click Save. You should now be able to browse the `neondb` database.
@@ -34,7 +34,7 @@ If you prefer a desktop tool like pgAdmin, follow these steps:
 ## 3. Database URL Structure
 
 The URL used in the application is:
-`postgresql://neondb_owner:npg_Fj6bG0DcStVr@ep-holy-block-a15z3e4p-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`
+`postgresql://<user>:<password>@<hostname>/neondb?sslmode=require`
 
 > [!NOTE]
 > The `sslmode=require` query parameter is critical for cloud-hosted databases in Neon.

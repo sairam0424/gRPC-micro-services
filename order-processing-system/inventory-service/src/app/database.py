@@ -15,7 +15,6 @@ if DATABASE_URL and "sslmode=" in DATABASE_URL:
 
 # Neon requires SSL. asyncpg uses sslmode in the URL, but for SQLAlchemy with asyncpg, 
 # we need to ensure the URL is properly formatted.
-# The user provided: postgresql://.../?sslmode=require
 # SQLAlchemy asyncpg usually handles this via connect_args or query params.
 
 engine = create_async_engine(
