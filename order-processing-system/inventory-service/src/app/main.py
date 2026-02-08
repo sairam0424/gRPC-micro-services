@@ -40,7 +40,7 @@ async def seed_data():
 async def lifespan(app: FastAPI):
     # Startup logic
     await init_db()
-    await seed_data()
+    # await seed_data()
     
     # Start gRPC server in the background
     server = grpc.aio.server()
