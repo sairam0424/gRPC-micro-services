@@ -58,6 +58,11 @@ func (s *server) SubscribeOrderUpdates(req *pb.SubscribeOrderUpdatesRequest, str
 	for {
 		select {
 		case event := <-ch:
+			// Filter by event type
+			if event.EventType != "order.updated" {
+				continue
+			}
+
 			// Filter by customer if requested
 			if req.CustomerId != "" && event.CustomerID != req.CustomerId {
 				continue
@@ -100,7 +105,7 @@ func main() {
 		subscribers: make(map[chan kafka.OrderEvent]struct{}),
 	}
 
-	consumer := kafka.NewConsumer([]string{kafkaBrokers}, "order-updates", "order-streamer-group")
+	consumer := kafka.NewConsumer([]string{kafkaBrokers}, "order-events", "order-streamer-group")
 	go consumer.Start(context.Background())
 
 	// Route events from Kafka to the hub
