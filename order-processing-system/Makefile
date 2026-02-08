@@ -10,6 +10,14 @@ generate:
 	    --python_out=src/generated --grpc_python_out=src/generated \
 	    ../proto/order/v1/order.proto ../proto/inventory/v1/inventory.proto
 	touch api-gateway/src/generated/__init__.py
+	find api-gateway/src/generated -type d -exec touch {}/__init__.py \;
+	
+	mkdir -p inventory-service/src/generated
+	cd api-gateway && ./venv/bin/python -m grpc_tools.protoc -I../proto -I.. \
+	    --python_out=../inventory-service/src/generated --grpc_python_out=../inventory-service/src/generated \
+	    ../proto/inventory/v1/inventory.proto
+	touch inventory-service/src/generated/__init__.py
+	find inventory-service/src/generated -type d -exec touch {}/__init__.py \;
 	
 	@echo "Generating Go gRPC code..."
 	mkdir -p order-service/pkg/generated

@@ -44,21 +44,9 @@ services:
       - DATABASE_URL=${DATABASE_URL}
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
-    depends_on:
-      - inventory-db
     networks:
       - grpc-net
 
-  inventory-db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=user
-      - POSTGRES_PASSWORD=password
-      - POSTGRES_DB=inventory
-    volumes:
-      - inventory-data:/var/lib/postgresql/data
-    networks:
-      - grpc-net
 
   web-client:
     build:

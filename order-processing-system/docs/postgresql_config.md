@@ -9,7 +9,11 @@ The service uses **SQLAlchemy** with the **asyncpg** driver for asynchronous com
 - **URL**: Managed via `DATABASE_URL` in `.env`.
 - **Driver**: `postgresql+asyncpg`
 - **SSL**: Required (`sslmode=require`)
-- **Setup**: See [Neon Setup Guide](./neon_setup.md) for detailed UI/Admin instructions.
+- **Connection Pooling**: Optimized for Neon Serverless.
+    - `pool_size`: 5
+    - `max_overflow`: 10
+    - `pool_recycle`: 1800s
+- **Setup**: See [Neon Setup Guide](./neon_setup.md) and [Schema Guide](./neon_schema_guide.md).
 
 ## Table Schema
 

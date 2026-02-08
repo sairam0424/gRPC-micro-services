@@ -16,17 +16,14 @@ from inventory.v1 import inventory_pb2, inventory_pb2_grpc
 from .database import init_db, get_db, async_session
 from .models import InventoryItem
 
+from contextlib import asynccontextmanager
+
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# FastAPI Setup
-app = FastAPI(title="Inventory Service API", version="0.1.0")
-
-@app.on_event("startup")
-async def startup():
-    await init_db()
-    # Seed initial data if empty
+# Seed initial data
+async def seed_data():
     async with async_session() as session:
         result = await session.execute(select(InventoryItem).limit(1))
         if not result.scalar():
@@ -39,6 +36,29 @@ async def startup():
             session.add_all(items)
             await session.commit()
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup logic
+    await init_db()
+    await seed_data()
+    
+    # Start gRPC server in the background
+    server = grpc.aio.server()
+    inventory_pb2_grpc.add_InventoryServiceServicer_to_server(InventoryServicer(), server)
+    listen_addr = "[::]:50052"
+    server.add_insecure_port(listen_addr)
+    logger.info(f"Starting gRPC server on {listen_addr}")
+    await server.start()
+    
+    yield
+    
+    # Shutdown logic
+    logger.info("Stopping gRPC server...")
+    await server.stop(0)
+
+# FastAPI Setup
+app = FastAPI(title="Inventory Service API", version="0.1.0", lifespan=lifespan)
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
@@ -49,58 +69,30 @@ async def list_inventory(db: AsyncSession = Depends(get_db)):
     items = result.scalars().all()
     return items
 
+from . import crud
+
 # gRPC Servicer Implementation
 class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
     async def CheckStock(self, request, context):
         async with async_session() as session:
-            result = await session.execute(
-                select(InventoryItem).where(InventoryItem.product_id == request.product_id)
-            )
-            item = result.scalar()
-            if not item:
-                return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=0)
-            return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=item.quantity)
+            item = await crud.get_inventory_item(session, request.product_id)
+            quantity = item.quantity if item else 0
+            return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=quantity)
 
     async def ReserveStock(self, request, context):
-        logger.info(f"Reserving stock for order {request.order_id}")
         async with async_session() as session:
             try:
-                # Check all items first (locking them for consistency)
-                items_to_reserve = []
-                for item_req in request.items:
-                    result = await session.execute(
-                        select(InventoryItem).where(InventoryItem.product_id == item_req.product_id).with_for_update()
-                    )
-                    db_item = result.scalar()
-                    if not db_item or db_item.quantity < item_req.quantity:
-                        return inventory_pb2.ReserveStockResponse(
-                            success=False, 
-                            message=f"Insufficient stock for {item_req.product_id}"
-                        )
-                    items_to_reserve.append((db_item, item_req.quantity))
-                
-                # Execute updates
-                for db_item, qty in items_to_reserve:
-                    db_item.quantity -= qty
-                
-                await session.commit()
-                return inventory_pb2.ReserveStockResponse(success=True, message="Stock reserved successfully")
+                success, message = await crud.reserve_stock_atomic(session, request.order_id, request.items)
+                return inventory_pb2.ReserveStockResponse(success=success, message=message)
             except Exception as e:
                 logger.error(f"Error during stock reservation: {e}")
                 await session.rollback()
                 return inventory_pb2.ReserveStockResponse(success=False, message=str(e))
 
     async def ReleaseStock(self, request, context):
-        logger.info(f"Releasing stock for order {request.order_id}")
         async with async_session() as session:
             try:
-                for item_req in request.items:
-                    await session.execute(
-                        update(InventoryItem)
-                        .where(InventoryItem.product_id == item_req.product_id)
-                        .values(quantity=InventoryItem.quantity + item_req.quantity)
-                    )
-                await session.commit()
+                await crud.release_stock_atomic(session, request.order_id, request.items)
                 return inventory_pb2.ReleaseStockResponse(success=True)
             except Exception as e:
                 logger.error(f"Error during stock release: {e}")
@@ -110,21 +102,7 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
     async def UpdateStock(self, request, context):
         async with async_session() as session:
             try:
-                result = await session.execute(
-                    select(InventoryItem).where(InventoryItem.product_id == request.product_id).with_for_update()
-                )
-                db_item = result.scalar()
-                if not db_item:
-                    db_item = InventoryItem(
-                        product_id=request.product_id, 
-                        name=f"Product {request.product_id}", 
-                        quantity=request.quantity_change
-                    )
-                    session.add(db_item)
-                else:
-                    db_item.quantity += request.quantity_change
-                
-                await session.commit()
+                db_item = await crud.update_stock_level(session, request.product_id, request.quantity_change)
                 return inventory_pb2.UpdateStockResponse(
                     product_id=db_item.product_id, 
                     new_quantity=db_item.quantity
@@ -132,27 +110,3 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
             except Exception as e:
                 await session.rollback()
                 context.abort(grpc.StatusCode.INTERNAL, str(e))
-
-async def serve_grpc():
-    server = grpc.aio.server()
-    inventory_pb2_grpc.add_InventoryServiceServicer_to_server(InventoryServicer(), server)
-    listen_addr = "[::]:50052"
-    server.add_insecure_port(listen_addr)
-    logger.info(f"Starting gRPC server on {listen_addr}")
-    await server.start()
-    await server.wait_for_termination()
-
-async def serve_fastapi():
-    config = uvicorn.Config(app, host="0.0.0.0", port=8001, log_level="info")
-    server = uvicorn.Server(config)
-    logger.info("Starting FastAPI server on 0.0.0.0:8001")
-    await server.serve()
-
-async def main():
-    await asyncio.gather(
-        serve_grpc(),
-        serve_fastapi()
-    )
-
-if __name__ == "__main__":
-    asyncio.run(main())
