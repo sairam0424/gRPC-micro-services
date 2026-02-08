@@ -14,7 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: () => void }) {
+export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: (order: any) => void }) {
   const [customerId, setCustomerId] = useState("");
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState(1);
@@ -43,7 +43,8 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: () => vo
       });
 
       if (response.ok) {
-        onOrderCreated();
+        const data = await response.json();
+        onOrderCreated(data);
         setOpen(false);
         // Reset form
         setCustomerId("");

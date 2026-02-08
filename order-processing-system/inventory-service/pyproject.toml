@@ -11,7 +11,8 @@ dependencies = [
     "grpcio-tools",
     "sqlalchemy",
     "asyncpg",
-    "pydantic-settings"
+    "pydantic-settings",
+    "aiokafka"
 ]
 requires-python = ">=3.10"
 

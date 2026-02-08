@@ -119,7 +119,7 @@ async def stream_order_updates(customer_id: str = None):
         order_status_streamer(customer_id or ""),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": "no-cache, no-transform",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no"  # Disable buffering for Nginx
         }

@@ -1,0 +1,87 @@
+import json
+import logging
+import asyncio
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from . import crud
+from .database import async_session
+
+logger = logging.getLogger(__name__)
+
+class KafkaManager:
+    def __init__(self, brokers, topic_in, topic_out):
+        self.brokers = brokers
+        self.topic_in = topic_in
+        self.topic_out = topic_out
+        self.consumer = None
+        self.producer = None
+        self._stop_event = asyncio.Event()
+
+    async def start(self):
+        self.consumer = AIOKafkaConsumer(
+            self.topic_in,
+            bootstrap_servers=self.brokers,
+            group_id="inventory-service-group",
+            value_deserializer=lambda v: json.loads(v.decode('utf-8'))
+        )
+        self.producer = AIOKafkaProducer(
+            bootstrap_servers=self.brokers,
+            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        )
+        await self.consumer.start()
+        await self.producer.start()
+        asyncio.create_task(self.consume_loop())
+        logger.info(f"Kafka Manager started on {self.brokers}")
+
+    async def stop(self):
+        self._stop_event.set()
+        if self.consumer:
+            await self.consumer.stop()
+        if self.producer:
+            await self.producer.stop()
+
+    async def consume_loop(self):
+        try:
+            async for msg in self.consumer:
+                if self._stop_event.is_set():
+                    break
+                
+                event = msg.value
+                logger.info(f"Received event: {event.get('event_type')} for order {event.get('order_id')}")
+                
+                if event.get("event_type") == "order.created":
+                    await self.handle_order_created(event)
+        except Exception as e:
+            logger.error(f"Error in Kafka consume loop: {e}")
+
+    async def handle_order_created(self, event):
+        order_id = event["order_id"]
+        customer_id = event["customer_id"]
+        items = event["items"]
+        
+        # We need to adapt the items list to what our crud expects (objects with product_id and quantity)
+        class ItemReq:
+            def __init__(self, product_id, quantity):
+                self.product_id = product_id
+                self.quantity = quantity
+
+        req_items = [ItemReq(i["product_id"], i["quantity"]) for i in items]
+
+        async with async_session() as session:
+            try:
+                success, message = await crud.reserve_stock_atomic(session, order_id, req_items)
+                
+                response_event = {
+                    "event_type": "inventory.reserved" if success else "inventory.failed",
+                    "order_id": order_id,
+                    "customer_id": customer_id,
+                    "status": "PROCESSING" if success else "FAILED",
+                    "message": message,
+                    "items": items
+                }
+                
+                await self.producer.send_and_wait(self.topic_out, response_event)
+                logger.info(f"Published outcome for order {order_id}: {response_event['event_type']}")
+                
+            except Exception as e:
+                logger.error(f"Error handling order.created: {e}")
+                # Optional: publish a generic failure event
