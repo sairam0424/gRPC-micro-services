@@ -10,17 +10,41 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"os"
+	"time"
 
+	"github.com/sairam0424/gRPC-micro-services/order-service/internal/client/inventory"
+	invpb "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1"
 	pb "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1"
 )
 
 type server struct {
 	pb.UnimplementedOrderServiceServer
-	mu     sync.RWMutex
-	orders map[string]*pb.GetOrderResponse
+	mu              sync.RWMutex
+	orders          map[string]*pb.GetOrderResponse
+	inventoryClient *inventory.Client
 }
 
 func (s *server) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*pb.CreateOrderResponse, error) {
+	// 1. Prepare inventory items
+	var invItems []*invpb.InventoryItem
+	for _, item := range req.Items {
+		invItems = append(invItems, &invpb.InventoryItem{
+			ProductId: item.ProductId,
+			Quantity:  item.Quantity,
+		})
+	}
+
+	// 2. Reserve stock
+	tempOrderID := fmt.Sprintf("TEMP-%d", time.Now().UnixNano())
+	success, msg, err := s.inventoryClient.ReserveStock(ctx, tempOrderID, invItems)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to communicate with inventory service: %v", err)
+	}
+	if !success {
+		return nil, status.Errorf(codes.FailedPrecondition, "inventory reservation failed: %s", msg)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -68,6 +92,17 @@ func (s *server) ListOrders(ctx context.Context, req *pb.ListOrdersRequest) (*pb
 }
 
 func main() {
+	inventoryAddr := os.Getenv("INVENTORY_SERVICE_ADDR")
+	if inventoryAddr == "" {
+		inventoryAddr = "localhost:50052"
+	}
+
+	invClient, err := inventory.NewClient(inventoryAddr)
+	if err != nil {
+		log.Fatalf("failed to create inventory client: %v", err)
+	}
+	defer invClient.Close()
+
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -75,7 +110,8 @@ func main() {
 	
 	s := grpc.NewServer()
 	srv := &server{
-		orders: make(map[string]*pb.GetOrderResponse),
+		orders:          make(map[string]*pb.GetOrderResponse),
+		inventoryClient: invClient,
 	}
 	
 	pb.RegisterOrderServiceServer(s, srv)

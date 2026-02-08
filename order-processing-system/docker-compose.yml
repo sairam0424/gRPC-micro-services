@@ -5,8 +5,12 @@ services:
       context: ./order-service
     ports:
       - "50051:50051"
+    environment:
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
     networks:
       - grpc-net
+    depends_on:
+      - inventory-service
 
   api-gateway:
     build:
@@ -18,11 +22,22 @@ services:
     networks:
       - grpc-net
 
+  inventory-service:
+    build:
+      context: ./inventory-service
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    networks:
+      - grpc-net
+
   web-client:
     build:
       context: ./web-client
     depends_on:
       - api-gateway
+      - inventory-service
     networks:
       - grpc-net
 
@@ -41,3 +56,6 @@ services:
 networks:
   grpc-net:
     driver: bridge
+
+volumes:
+  inventory-data:

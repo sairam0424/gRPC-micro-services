@@ -15,32 +15,45 @@ export interface Order {
 
 export default function Dashboard() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [inventory, setInventory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchOrders = async () => {
     try {
-      // In a real app, we'd fetch actual orders. 
-      // For now, let's mock or fetch from the gateway if available.
       const response = await fetch("/api/orders");
       if (response.ok) {
         const data = await response.json();
         setOrders(data.orders || []);
-      } else {
-        // Fallback mock data
-        setOrders([
-          { order_id: "ORD-001", customer_id: "CUST-123", status: "COMPLETED" },
-          { order_id: "ORD-002", customer_id: "CUST-456", status: "PENDING" },
-        ]);
       }
     } catch (error) {
       console.error("Failed to fetch orders:", error);
-    } finally {
-      setLoading(false);
     }
   };
 
+  const fetchInventory = async () => {
+    try {
+      // In a real app, we'd have a proxy endpoint in the gateway
+      // Since we don't have a direct gRPC ListInventory yet, 
+      // let's assume the gateway provides a basic health/status or we call inventory-service if possible.
+      // For this demo, we'll fetch from the gateway's new /inventory endpoint
+      const response = await fetch("/api/inventory");
+      if (response.ok) {
+        // This is just a status for now as per my gateway change
+        // In a real system, it would return the actual list.
+      }
+    } catch (error) {
+      console.error("Failed to fetch inventory:", error);
+    }
+  };
+
+  const refreshData = async () => {
+    setLoading(true);
+    await Promise.all([fetchOrders(), fetchInventory()]);
+    setLoading(false);
+  };
+
   useEffect(() => {
-    fetchOrders();
+    refreshData();
   }, []);
 
   return (
@@ -48,7 +61,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         <div className="flex items-center space-x-2">
-          <CreateOrderDialog onOrderCreated={fetchOrders} />
+          <CreateOrderDialog onOrderCreated={refreshData} />
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

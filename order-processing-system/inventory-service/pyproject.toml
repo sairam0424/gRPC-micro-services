@@ -1,0 +1,23 @@
+[project]
+name = "inventory-service"
+version = "0.1.0"
+description = "Order Processing Inventory Service"
+authors = [
+    {name = "Your Name", email = "you@example.com"}
+]
+dependencies = [
+    "fastapi[standard]",
+    "grpcio",
+    "grpcio-tools",
+    "sqlalchemy",
+    "asyncpg",
+    "pydantic-settings"
+]
+requires-python = ">=3.10"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
