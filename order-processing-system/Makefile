@@ -8,7 +8,7 @@ generate:
 	mkdir -p api-gateway/src/generated
 	cd api-gateway && ./venv/bin/python -m grpc_tools.protoc -I../proto -I.. \
 	    --python_out=src/generated --grpc_python_out=src/generated \
-	    ../proto/order/v1/order.proto ../proto/inventory/v1/inventory.proto
+	    ../proto/order/v1/order.proto ../proto/inventory/v1/inventory.proto ../proto/stream/v1/stream.proto
 	touch api-gateway/src/generated/__init__.py
 	find api-gateway/src/generated -type d -exec touch {}/__init__.py \;
 	
@@ -32,7 +32,19 @@ generate:
 		--go-grpc_out=order-service/pkg/generated --go-grpc_opt=paths=source_relative \
 		--grpc-gateway_out=order-service/pkg/generated --grpc-gateway_opt=paths=source_relative \
 		--openapiv2_out=order-service/pkg/generated \
-		proto/order/v1/order.proto proto/inventory/v1/inventory.proto
+		proto/order/v1/order.proto proto/inventory/v1/inventory.proto proto/stream/v1/stream.proto
+	
+	mkdir -p order-streamer/pkg/generated
+	export PATH=$$PATH:$$(go env GOPATH)/bin && \
+		protoc \
+		-Iproto \
+		-I. \
+		-I/usr/local/include \
+		-I/opt/homebrew/include \
+		-I$$(go env GOPATH)/pkg/mod \
+		--go_out=order-streamer/pkg/generated --go_opt=paths=source_relative \
+		--go-grpc_out=order-streamer/pkg/generated --go-grpc_opt=paths=source_relative \
+		proto/stream/v1/stream.proto
 	
 	@echo "Validating OpenAPI spec with go-swagger..."
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \
@@ -41,6 +53,7 @@ generate:
 clean:
 	rm -rf api-gateway/src/generated/*
 	rm -rf order-service/pkg/generated/*
+	rm -rf order-streamer/pkg/generated/*
 
 up:
 	docker compose up --build

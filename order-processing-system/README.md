@@ -9,8 +9,8 @@ The system follows a modern microservices architecture:
 - **Order Service (Go)**: Manages business logic and coordinates with Inventory.
 - **Inventory Service (Python)**: Manages product stock with PostgreSQL persistence.
 - **Web Client (Next.js)**: Modern dashboard for managing orders and stock.
-- **Nginx Proxy**: Single entry point handling routing and security.
-- **PostgreSQL**: Reliable storage for inventory and stock management.
+- **Kafka**: Asynchronous message broker for decoupled event processing.
+- **Order Streamer (Go)**: Consumes Kafka events and provides gRPC server-streaming.
 - **gRPC/Protobuf**: Used for efficient, typesafe internal communication.
 
 For details, see [docs/architecture.md](./docs/architecture.md) and [docs/frontend_integration.md](./docs/frontend_integration.md).
