@@ -1,0 +1,2 @@
+data: {"order_id": "ORD-1770572945848719635", "customer_id": "SAGA-USER-1", "status": "FAILED", "message": "Product PROD-101 not found", "items": [{"product_id": "PROD-101", "quantity": 2, "price": 999.0}]}
+
