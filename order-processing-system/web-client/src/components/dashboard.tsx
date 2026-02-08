@@ -45,14 +45,9 @@ export default function Dashboard() {
 
   const fetchInventory = async () => {
     try {
-      // In a real app, we'd have a proxy endpoint in the gateway
-      // Since we don't have a direct gRPC ListInventory yet,
-      // let's assume the gateway provides a basic health/status or we call inventory-service if possible.
-      // For this demo, we'll fetch from the gateway's new /inventory endpoint
       const response = await fetch("/api/inventory");
       if (response.ok) {
-        // This is just a status for now as per my gateway change
-        // In a real system, it would return the actual list.
+        // Inventory status check
       }
     } catch (error) {
       console.error("Failed to fetch inventory:", error);
@@ -82,7 +77,9 @@ export default function Dashboard() {
         console.log("Received live update:", data);
 
         setOrders((prevOrders: Order[]) => {
-          const orderIndex = prevOrders.findIndex((o: Order) => o.order_id === data.order_id);
+          const orderIndex = prevOrders.findIndex(
+            (o: Order) => o.order_id === data.order_id,
+          );
           if (orderIndex > -1) {
             const updatedOrders = [...prevOrders];
             updatedOrders[orderIndex] = {
@@ -115,11 +112,12 @@ export default function Dashboard() {
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         <div className="flex items-center space-x-2">
-          <CreateOrderDialog onOrderCreated={() => {
-            // We rely on SSE to pick up the new order and its status updates
-            // but we might want to refresh inventory if stock changed.
-            fetchInventory();
-          }} />
+          <CreateOrderDialog
+            onOrderCreated={(newOrder) => {
+              setOrders((prev) => [newOrder, ...prev]);
+              fetchInventory();
+            }}
+          />
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
