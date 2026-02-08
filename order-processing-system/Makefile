@@ -8,8 +8,16 @@ generate:
 	mkdir -p api-gateway/src/generated
 	cd api-gateway && ./venv/bin/python -m grpc_tools.protoc -I../proto -I.. \
 	    --python_out=src/generated --grpc_python_out=src/generated \
-	    ../proto/order/v1/order.proto
+	    ../proto/order/v1/order.proto ../proto/inventory/v1/inventory.proto
 	touch api-gateway/src/generated/__init__.py
+	find api-gateway/src/generated -type d -exec touch {}/__init__.py \;
+	
+	mkdir -p inventory-service/src/generated
+	cd api-gateway && ./venv/bin/python -m grpc_tools.protoc -I../proto -I.. \
+	    --python_out=../inventory-service/src/generated --grpc_python_out=../inventory-service/src/generated \
+	    ../proto/inventory/v1/inventory.proto
+	touch inventory-service/src/generated/__init__.py
+	find inventory-service/src/generated -type d -exec touch {}/__init__.py \;
 	
 	@echo "Generating Go gRPC code..."
 	mkdir -p order-service/pkg/generated
@@ -24,7 +32,7 @@ generate:
 		--go-grpc_out=order-service/pkg/generated --go-grpc_opt=paths=source_relative \
 		--grpc-gateway_out=order-service/pkg/generated --grpc-gateway_opt=paths=source_relative \
 		--openapiv2_out=order-service/pkg/generated \
-		proto/order/v1/order.proto
+		proto/order/v1/order.proto proto/inventory/v1/inventory.proto
 	
 	@echo "Validating OpenAPI spec with go-swagger..."
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \

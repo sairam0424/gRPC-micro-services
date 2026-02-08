@@ -20,10 +20,12 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: () => vo
   const [quantity, setQuantity] = useState(1);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
+    setError(null);
     try {
       const response = await fetch("/api/orders", {
         method: "POST",
@@ -48,10 +50,12 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: () => vo
         setProductId("");
         setQuantity(1);
       } else {
-        console.error("Failed to create order");
+        const data = await response.json();
+        setError(data.detail || "Failed to create order");
       }
     } catch (error) {
       console.error("Error creating order:", error);
+      setError("Network error. Please try again.");
     } finally {
       setSubmitting(false);
     }
@@ -111,6 +115,11 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: () => vo
                 required
               />
             </div>
+            {error && (
+              <div className="col-span-4 rounded-md bg-destructive/15 p-3 text-sm text-destructive font-medium">
+                {error}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={submitting}>

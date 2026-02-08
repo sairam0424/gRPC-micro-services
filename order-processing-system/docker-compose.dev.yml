@@ -9,11 +9,14 @@ services:
       - ./order-service:/app
     ports:
       - "50051:50051"
+    environment:
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
     # Overriding CMD to use air for hot-reloading
-    # Note: Requires air to be installed in the image or run via go run
     command: sh -c "go install github.com/air-verse/air@latest && air -c .air.toml"
     networks:
       - grpc-net
+    depends_on:
+      - inventory-service
 
   api-gateway:
     build:
@@ -23,12 +26,27 @@ services:
       - ./api-gateway/src:/app/src
     environment:
       - ORDER_SERVICE_ADDR=order-service:50051
-    # Using uvicorn with --reload for hot-reloading
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - order-service
     networks:
       - grpc-net
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./inventory-service/src:/app/src
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+    # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
+    networks:
+      - grpc-net
+
 
   web-client:
     build:
@@ -40,6 +58,7 @@ services:
     command: npm run dev
     depends_on:
       - api-gateway
+      - inventory-service
     networks:
       - grpc-net
 
@@ -58,3 +77,6 @@ services:
 networks:
   grpc-net:
     driver: bridge
+
+volumes:
+  inventory-data:

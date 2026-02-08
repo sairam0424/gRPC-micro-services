@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+option go_package = "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1;inventoryv1";
+
+// InventoryService manages product stock levels.
+service InventoryService {
+  // CheckStock returns the current quantity of an item.
+  rpc CheckStock(CheckStockRequest) returns (CheckStockResponse);
+
+  // ReserveStock attempts to lock items for an order.
+  // This is a single atomic operation for multiple items.
+  rpc ReserveStock(ReserveStockRequest) returns (ReserveStockResponse);
+
+  // ReleaseStock releases previously reserved items (e.g., if order fails).
+  rpc ReleaseStock(ReleaseStockRequest) returns (ReleaseStockResponse);
+
+  // UpdateStock is used for manual inventory management (adding stock).
+  rpc UpdateStock(UpdateStockRequest) returns (UpdateStockResponse);
+}
+
+message CheckStockRequest {
+  string product_id = 1;
+}
+
+message CheckStockResponse {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+
+message ReserveStockRequest {
+  string order_id = 1;
+  repeated InventoryItem items = 2;
+}
+
+message ReserveStockResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message ReleaseStockRequest {
+  string order_id = 1;
+  repeated InventoryItem items = 2;
+}
+
+message ReleaseStockResponse {
+  bool success = 1;
+}
+
+message UpdateStockRequest {
+  string product_id = 1;
+  int32 quantity_change = 2; // Positive to add, negative to remove
+}
+
+message UpdateStockResponse {
+  string product_id = 1;
+  int32 new_quantity = 2;
+}
+
+message InventoryItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
