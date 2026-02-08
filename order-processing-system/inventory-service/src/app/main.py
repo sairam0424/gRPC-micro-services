@@ -36,11 +36,17 @@ async def seed_data():
             session.add_all(items)
             await session.commit()
 
+from .kafka_manager import KafkaManager
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup logic
     await init_db()
     # await seed_data()
+    
+    kafka_brokers = os.getenv("KAFKA_BROKERS", "kafka:29092")
+    app.state.kafka = KafkaManager(kafka_brokers, "order-events", "order-events")
+    await app.state.kafka.start()
     
     # Start gRPC server in the background
     server = grpc.aio.server()
@@ -55,6 +61,7 @@ async def lifespan(app: FastAPI):
     # Shutdown logic
     logger.info("Stopping gRPC server...")
     await server.stop(0)
+    await app.state.kafka.stop()
 
 # FastAPI Setup
 app = FastAPI(title="Inventory Service API", version="0.1.0", lifespan=lifespan)

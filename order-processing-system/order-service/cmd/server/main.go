@@ -16,7 +16,6 @@ import (
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/database"
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/kafka"
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/models"
-	invpb "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1"
 	pb "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1"
 	"gorm.io/gorm"
 )
@@ -28,25 +27,6 @@ type server struct {
 }
 
 func (s *server) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*pb.CreateOrderResponse, error) {
-	// 1. Prepare inventory items
-	var invItems []*invpb.InventoryItem
-	for _, item := range req.Items {
-		invItems = append(invItems, &invpb.InventoryItem{
-			ProductId: item.ProductId,
-			Quantity:  item.Quantity,
-		})
-	}
-
-	// 2. Reserve stock
-	tempOrderID := fmt.Sprintf("TEMP-%d", time.Now().UnixNano())
-	success, msg, err := s.inventoryClient.ReserveStock(ctx, tempOrderID, invItems)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to communicate with inventory service: %v", err)
-	}
-	if !success {
-		return nil, status.Errorf(codes.FailedPrecondition, "inventory reservation failed: %s", msg)
-	}
-
 	// Generate Order ID
 	orderID := fmt.Sprintf("ORD-%d", time.Now().UnixNano())
 
@@ -79,8 +59,9 @@ func (s *server) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*
 		})
 	}
 
-	// 3. Publish PENDING event
-	err = s.kafkaProducer.PublishOrderEvent(context.Background(), kafka.OrderEvent{
+	// 3. Publish order.created event
+	err := s.kafkaProducer.PublishOrderEvent(context.Background(), kafka.OrderEvent{
+		EventType:  "order.created",
 		OrderID:    orderID,
 		CustomerID: req.CustomerId,
 		Status:     "PENDING",
@@ -88,26 +69,8 @@ func (s *server) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*
 		Items:      eventItems,
 	})
 	if err != nil {
-		log.Printf("Non-critical error publishing PENDING event: %v", err)
+		log.Printf("Non-critical error publishing order.created event: %v", err)
 	}
-
-	// 4. Simulate background processing
-	go func(oid, cid string) {
-		time.Sleep(5 * time.Second)
-		// Update DB
-		database.DB.Model(&models.Order{}).Where("order_id = ?", oid).Update("status", "COMPLETED")
-
-		err = s.kafkaProducer.PublishOrderEvent(context.Background(), kafka.OrderEvent{
-			OrderID:    oid,
-			CustomerID: cid,
-			Status:     "COMPLETED",
-			Message:    "Order processed successfully",
-			Items:      eventItems,
-		})
-		if err != nil {
-			log.Printf("Non-critical error publishing COMPLETED event: %v", err)
-		}
-	}(orderID, req.CustomerId)
 
 	log.Printf("Created order: %s for customer: %s", orderID, req.CustomerId)
 	return &pb.CreateOrderResponse{
@@ -196,8 +159,12 @@ func main() {
 
 	database.InitDB()
 
-	producer := kafka.NewProducer([]string{kafkaBrokers}, "order-updates")
+	producer := kafka.NewProducer([]string{kafkaBrokers}, "order-events")
 	defer producer.Close()
+
+	consumer := kafka.NewOrderConsumer([]string{kafkaBrokers}, "order-events", "order-service-group", producer)
+	go consumer.Start(context.Background())
+	defer consumer.Close()
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
