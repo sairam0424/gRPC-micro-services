@@ -2,8 +2,21 @@
 
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { CreateOrderDialog } from "@/components/create-order-dialog";
 
@@ -33,7 +46,7 @@ export default function Dashboard() {
   const fetchInventory = async () => {
     try {
       // In a real app, we'd have a proxy endpoint in the gateway
-      // Since we don't have a direct gRPC ListInventory yet, 
+      // Since we don't have a direct gRPC ListInventory yet,
       // let's assume the gateway provides a basic health/status or we call inventory-service if possible.
       // For this demo, we'll fetch from the gateway's new /inventory endpoint
       const response = await fetch("/api/inventory");
@@ -54,6 +67,47 @@ export default function Dashboard() {
 
   useEffect(() => {
     refreshData();
+
+    // Setup SSE for live updates
+    const eventSource = new EventSource("/api/orders/events");
+
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.error) {
+          console.error("Streaming error:", data.error);
+          return;
+        }
+
+        console.log("Received live update:", data);
+
+        setOrders((prevOrders: Order[]) => {
+          const orderIndex = prevOrders.findIndex((o: Order) => o.order_id === data.order_id);
+          if (orderIndex > -1) {
+            const updatedOrders = [...prevOrders];
+            updatedOrders[orderIndex] = {
+              ...updatedOrders[orderIndex],
+              status: data.status,
+            };
+            return updatedOrders;
+          } else {
+            // New order discovered via stream
+            return [data, ...prevOrders];
+          }
+        });
+      } catch (error) {
+        console.error("Failed to parse SSE message:", error);
+      }
+    };
+
+    eventSource.onerror = (error) => {
+      console.error("EventSource failed:", error);
+      // Optional: implement retry logic here
+    };
+
+    return () => {
+      eventSource.close();
+    };
   }, []);
 
   return (
@@ -61,7 +115,11 @@ export default function Dashboard() {
       <div className="flex items-center justify-between space-y-2">
         <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
         <div className="flex items-center space-x-2">
-          <CreateOrderDialog onOrderCreated={refreshData} />
+          <CreateOrderDialog onOrderCreated={() => {
+            // We rely on SSE to pick up the new order and its status updates
+            // but we might want to refresh inventory if stock changed.
+            fetchInventory();
+          }} />
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -95,15 +153,23 @@ export default function Dashboard() {
             <TableBody>
               {orders.map((order) => (
                 <TableRow key={order.order_id}>
-                  <TableCell className="font-medium">{order.order_id}</TableCell>
+                  <TableCell className="font-medium">
+                    {order.order_id}
+                  </TableCell>
                   <TableCell>{order.customer_id}</TableCell>
                   <TableCell>
-                    <Badge variant={order.status === "COMPLETED" ? "default" : "secondary"}>
+                    <Badge
+                      variant={
+                        order.status === "COMPLETED" ? "default" : "secondary"
+                      }
+                    >
                       {order.status}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">View</Button>
+                    <Button variant="ghost" size="sm">
+                      View
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

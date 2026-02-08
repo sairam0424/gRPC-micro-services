@@ -93,12 +93,37 @@ async def list_orders(customer_id: str = None):
                     {
                         "order_id": order.order_id,
                         "customer_id": order.customer_id,
-                        "status": order_pb2.OrderStatus.Name(order.status)
+                        "status": order_pb2.OrderStatus.Name(order.status),
+                        "items": [
+                            {
+                                "product_id": item.product_id,
+                                "quantity": item.quantity,
+                                "price": item.price
+                            } for item in order.items
+                        ]
                     } for order in response.orders
                 ]
             }
     except grpc.RpcError as e:
         raise HTTPException(status_code=503, detail=f"Order Service unavailable: {e.details()}")
+
+from .streaming import order_status_streamer
+from fastapi.responses import StreamingResponse
+
+@app.get("/orders/events")
+async def stream_order_updates(customer_id: str = None):
+    """
+    Server-Sent Events (SSE) endpoint for real-time order status updates.
+    """
+    return StreamingResponse(
+        order_status_streamer(customer_id or ""),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable buffering for Nginx
+        }
+    )
 
 @app.get("/orders/{order_id}")
 async def get_order(order_id: str):
@@ -110,7 +135,14 @@ async def get_order(order_id: str):
             return {
                 "order_id": response.order_id,
                 "customer_id": response.customer_id,
-                "status": order_pb2.OrderStatus.Name(response.status)
+                "status": order_pb2.OrderStatus.Name(response.status),
+                "items": [
+                    {
+                        "product_id": item.product_id,
+                        "quantity": item.quantity,
+                        "price": item.price
+                    } for item in response.items
+                ]
             }
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
