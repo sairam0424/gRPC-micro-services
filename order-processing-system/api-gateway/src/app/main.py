@@ -84,7 +84,7 @@ async def create_order(request: CreateOrderRequest):
 @app.get("/orders")
 async def list_orders(customer_id: str = None):
     try:
-        with get_grpc_channel() as channel:
+        with get_order_channel() as channel:
             stub = order_pb2_grpc.OrderServiceStub(channel)
             rpc_request = order_pb2.ListOrdersRequest(customer_id=customer_id or "")
             response = stub.ListOrders(rpc_request)
@@ -103,7 +103,7 @@ async def list_orders(customer_id: str = None):
 @app.get("/orders/{order_id}")
 async def get_order(order_id: str):
     try:
-        with get_grpc_channel() as channel:
+        with get_order_channel() as channel:
             stub = order_pb2_grpc.OrderServiceStub(channel)
             rpc_request = order_pb2.GetOrderRequest(order_id=order_id)
             response = stub.GetOrder(rpc_request)
