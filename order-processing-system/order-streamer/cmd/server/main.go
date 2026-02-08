@@ -59,7 +59,7 @@ func (s *server) SubscribeOrderUpdates(req *pb.SubscribeOrderUpdatesRequest, str
 		select {
 		case event := <-ch:
 			// Filter by event type
-			if event.EventType != "order.updated" {
+			if event.EventType != "order.created" && event.EventType != "order.updated" {
 				continue
 			}
 
