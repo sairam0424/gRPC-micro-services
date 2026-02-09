@@ -6,7 +6,7 @@ import Link from "next/link";
 import { LogIn, CheckCircle2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { hashPassword } from "@/lib/utils";
+// import { hashPassword } from "@/lib/utils"; // Remove - file doesn't exist
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
