@@ -4,14 +4,48 @@ import (
 	"context"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"sync"
 
 	"github.com/sairam0424/gRPC-micro-services/order-streamer/internal/kafka"
 	pb "github.com/sairam0424/gRPC-micro-services/order-streamer/pkg/generated/stream/v1"
+
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+func initTracer() (*sdktrace.TracerProvider, error) {
+	ctx := context.Background()
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otelEndpoint == "" {
+		otelEndpoint = "localhost:4317"
+	}
+
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint(otelEndpoint),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("order-streamer"),
+		)),
+	)
+	otel.SetTracerProvider(tp)
+	return tp, nil
+}
 
 type hub struct {
 	mu          sync.RWMutex
@@ -96,6 +130,16 @@ func (s *server) SubscribeOrderUpdates(req *pb.SubscribeOrderUpdatesRequest, str
 }
 
 func main() {
+	tp, err := initTracer()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
+
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
 		kafkaBrokers = "localhost:9092"
@@ -120,9 +164,23 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 	pb.RegisterStreamServiceServer(s, &server{hub: h})
 	reflection.Register(s)
+
+	// Start health check server
+	go func() {
+		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("healthy"))
+		})
+		log.Printf("Health check server listening at :8082")
+		if err := http.ListenAndServe(":8082", nil); err != nil {
+			log.Printf("Health check server failed: %v", err)
+		}
+	}()
 
 	log.Printf("Order Streamer Service listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
