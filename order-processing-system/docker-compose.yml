@@ -7,10 +7,12 @@ services:
       - "50051:50051"
     environment:
       - INVENTORY_SERVICE_ADDR=inventory-service:50052
+      - DATABASE_URL=${ORDER_DATABASE_URL}
     networks:
       - grpc-net
     depends_on:
       - inventory-service
+      - kafka
 
   api-gateway:
     build:
@@ -18,9 +20,24 @@ services:
     environment:
       - ORDER_SERVICE_ADDR=order-service:50051
       - STREAM_SERVICE_ADDR=order-streamer:50053
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
     depends_on:
       - order-service
       - order-streamer
+      - auth-service
+    networks:
+      - grpc-net
+
+  auth-service:
+    build:
+      context: ./auth-service
+    ports:
+      - "8002:8002"
+    environment:
+      - DATABASE_URL=${ORDER_DATABASE_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
+    depends_on:
+      - kafka
     networks:
       - grpc-net
 
