@@ -18,6 +18,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/context/auth-context";
+import { UserNav } from "./user-nav";
+import { Package2 } from "lucide-react";
 import { CreateOrderDialog } from "@/components/create-order-dialog";
 
 export interface Order {
@@ -27,17 +30,19 @@ export interface Order {
 }
 
 export default function Dashboard() {
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-
+  const { token, user } = useAuth();
+  
   const fetchOrders = async () => {
     try {
-      const response = await fetch("/api/orders");
-      if (response.ok) {
-        const data = await response.json();
-        setOrders(data.orders || []);
-      }
+      const response = await fetch("/api/orders", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      setOrders(data.orders || []);
     } catch (error) {
       console.error("Failed to fetch orders:", error);
     }
@@ -45,136 +50,165 @@ export default function Dashboard() {
 
   const fetchInventory = async () => {
     try {
-      const response = await fetch("/api/inventory");
-      if (response.ok) {
-        // Inventory status check
-      }
+      const response = await fetch("/api/inventory", {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await response.json();
+      setInventory(data.inventory || []);
     } catch (error) {
       console.error("Failed to fetch inventory:", error);
     }
   };
 
-  const refreshData = async () => {
-    setLoading(true);
-    await Promise.all([fetchOrders(), fetchInventory()]);
-    setLoading(false);
-  };
-
   useEffect(() => {
-    refreshData();
+    if (!token) return;
 
-    // Setup SSE for live updates
-    const eventSource = new EventSource("/api/orders/events");
+    fetchOrders();
+    fetchInventory();
 
+    const eventSource = new EventSource(`/api/orders/events?token=${token}`);
+    
     eventSource.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data);
-        if (data.error) {
-          console.error("Streaming error:", data.error);
-          return;
-        }
-
-        console.log("Received live update:", data);
-
-        setOrders((prevOrders: Order[]) => {
-          const orderIndex = prevOrders.findIndex(
-            (o: Order) => o.order_id === data.order_id,
-          );
-          if (orderIndex > -1) {
-            const updatedOrders = [...prevOrders];
-            updatedOrders[orderIndex] = {
-              ...updatedOrders[orderIndex],
-              status: data.status,
-            };
-            return updatedOrders;
-          } else {
-            // New order discovered via stream
-            return [data, ...prevOrders];
+        const updatedOrder = JSON.parse(event.data);
+        setOrders((prev) => {
+          const index = prev.findIndex((o) => o.order_id === updatedOrder.order_id);
+          if (index !== -1) {
+            const newOrders = [...prev];
+            newOrders[index] = updatedOrder;
+            return newOrders;
           }
+          return [updatedOrder, ...prev];
         });
       } catch (error) {
         console.error("Failed to parse SSE message:", error);
       }
     };
 
-    eventSource.onerror = (error) => {
-      console.error("EventSource failed:", error);
-      // Optional: implement retry logic here
-    };
-
-    return () => {
-      eventSource.close();
-    };
-  }, []);
+    return () => eventSource.close();
+  }, [token]);
 
   return (
-    <div className="flex-1 space-y-4 p-8 pt-6">
-      <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <div className="flex items-center space-x-2">
-          <CreateOrderDialog
-            onOrderCreated={(newOrder) => {
-              setOrders((prev) => [newOrder, ...prev]);
-              fetchInventory();
-            }}
-          />
+    <div className="flex min-h-screen flex-col bg-zinc-950 text-zinc-100">
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white shadow-lg shadow-primary/20">
+              <Package2 className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">OrderCore</h1>
+              <p className="text-[10px] uppercase tracking-widest text-zinc-500">Enterprise Logistics</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <CreateOrderDialog onOrderCreated={(newOrder) => setOrders(prev => [newOrder, ...prev])} />
+            <div className="h-8 w-px bg-zinc-800" />
+            <UserNav />
+          </div>
         </div>
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{orders.length}</div>
-          </CardContent>
-        </Card>
-        {/* Add more summary cards here */}
-      </div>
-      <Card className="col-span-4">
-        <CardHeader>
-          <CardTitle>Recent Orders</CardTitle>
-          <CardDescription>
-            You have {orders.length} orders in the system.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Order ID</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((order) => (
-                <TableRow key={order.order_id}>
-                  <TableCell className="font-medium">
-                    {order.order_id}
-                  </TableCell>
-                  <TableCell>{order.customer_id}</TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={
-                        order.status === "COMPLETED" ? "default" : "secondary"
-                      }
-                    >
-                      {order.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
-                      View
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      </header>
+
+      <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:px-8">
+        <div className="grid gap-8 lg:grid-cols-3">
+          {/* Order List */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-semibold">Orders</h2>
+              <div className="flex items-center gap-2 text-sm text-zinc-500">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+                Live Updates Enabled
+              </div>
+            </div>
+            <div className="grid gap-4">
+              {orders.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 py-20 text-center">
+                  <div className="rounded-full bg-zinc-800/50 p-4 mb-4 text-zinc-600">
+                    <Package2 className="h-10 w-10" />
+                  </div>
+                  <h3 className="text-lg font-medium text-zinc-400">No orders yet</h3>
+                  <p className="text-sm text-zinc-500 max-w-xs mt-1">Create your first order to see it appear here in real-time.</p>
+                </div>
+              ) : (
+                orders.map((order) => (
+                  <div 
+                    key={order.order_id} 
+                    className="group relative overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6 transition-all hover:border-zinc-700 hover:bg-zinc-900 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Order ID</p>
+                        <p className="font-mono text-sm font-semibold">{order.order_id}</p>
+                      </div>
+                      <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${
+                        order.status === 'COMPLETED' ? 'bg-green-500/10 text-green-500' :
+                        order.status === 'FAILED' ? 'bg-red-500/10 text-red-500' :
+                        order.status === 'PENDING' ? 'bg-yellow-500/10 text-yellow-500' :
+                        'bg-blue-500/10 text-blue-500'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${
+                          order.status === 'COMPLETED' ? 'bg-green-500' :
+                          order.status === 'FAILED' ? 'bg-red-500' :
+                          'bg-current animate-pulse'
+                        }`} />
+                        {order.status}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Customer</p>
+                        <p className="text-sm">{order.customer_id}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Total Items</p>
+                        <p className="text-sm font-semibold text-primary">{order.items?.length || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Inventory Summary */}
+          <div className="space-y-6">
+            <h2 className="text-2xl font-semibold">Inventory</h2>
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+              <div className="space-y-4">
+                {['SKU-1001', 'SKU-1002', 'SKU-1003'].map((sku) => (
+                  <div key={sku} className="flex items-center justify-between border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">{sku}</p>
+                      <p className="text-xs text-zinc-500">Reserved: 12 units</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold">120</p>
+                      <p className="text-[10px] uppercase font-bold text-zinc-500">Available</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* System Status Card */}
+            <div className="rounded-2xl bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 p-6">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-primary mb-2">System Status</h3>
+              <p className="text-xs text-zinc-400 mb-4 leading-relaxed">The Saga orchestrator is actively managing inventory reservations across all active shards.</p>
+              <div className="flex gap-2">
+                <div className="h-1 flex-1 rounded-full bg-primary/20 overflow-hidden">
+                  <div className="h-full w-full bg-primary animate-pulse" />
+                </div>
+                <div className="h-1 flex-1 rounded-full bg-primary/20 overflow-hidden">
+                   <div className="h-full w-2/3 bg-primary" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

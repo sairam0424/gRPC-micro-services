@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException
-from typing import List
+from fastapi import FastAPI, HTTPException, Depends, Request
+from typing import List, Optional
 from pydantic import BaseModel
 import grpc
 import os
@@ -13,6 +13,8 @@ from order.v1 import order_pb2, order_pb2_grpc
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
 
 app = FastAPI(title="Order Processing API Gateway", root_path="/api")
+
+from .auth import verify_jwt
 
 # Configuration
 ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_ADDR", "localhost:50051")
@@ -37,7 +39,7 @@ def get_inventory_channel():
 async def root():
     return {"message": "Welcome to Order Processing API Gateway", "status": "Online"}
 
-@app.get("/inventory")
+@app.get("/inventory", dependencies=[Depends(verify_jwt)])
 async def list_inventory():
     try:
         with get_inventory_channel() as channel:
@@ -52,7 +54,10 @@ async def list_inventory():
         raise HTTPException(status_code=503, detail=f"Inventory Service unavailable: {e}")
 
 @app.post("/orders")
-async def create_order(request: CreateOrderRequest):
+async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_jwt), req_obj: Request = None):
+    # Use the verified user_id instead of whatever the client sent for safety
+    customer_id = req_obj.state.user_id if req_obj else request.customer_id
+    
     try:
         with get_order_channel() as channel:
             stub = order_pb2_grpc.OrderServiceStub(channel)
@@ -67,7 +72,7 @@ async def create_order(request: CreateOrderRequest):
             ]
             
             rpc_request = order_pb2.CreateOrderRequest(
-                customer_id=request.customer_id,
+                customer_id=str(customer_id),
                 items=rpc_items
             )
             
@@ -82,11 +87,14 @@ async def create_order(request: CreateOrderRequest):
         raise HTTPException(status_code=503, detail=f"Order Service error: {e.details()}")
 
 @app.get("/orders")
-async def list_orders(customer_id: str = None):
+async def list_orders(customer_id: Optional[str] = None, user: dict = Depends(verify_jwt), req_obj: Request = None):
+    # If no customer_id provided, filter by the logged-in user
+    id_to_query = customer_id or req_obj.state.user_id
+    
     try:
         with get_order_channel() as channel:
             stub = order_pb2_grpc.OrderServiceStub(channel)
-            rpc_request = order_pb2.ListOrdersRequest(customer_id=customer_id or "")
+            rpc_request = order_pb2.ListOrdersRequest(customer_id=str(id_to_query))
             response = stub.ListOrders(rpc_request)
             return {
                 "orders": [
@@ -111,12 +119,13 @@ from .streaming import order_status_streamer
 from fastapi.responses import StreamingResponse
 
 @app.get("/orders/events")
-async def stream_order_updates(customer_id: str = None):
+async def stream_order_updates(customer_id: Optional[str] = None, user: dict = Depends(verify_jwt), req_obj: Request = None):
     """
     Server-Sent Events (SSE) endpoint for real-time order status updates.
     """
+    id_to_stream = customer_id or req_obj.state.user_id
     return StreamingResponse(
-        order_status_streamer(customer_id or ""),
+        order_status_streamer(str(id_to_stream)),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -125,7 +134,7 @@ async def stream_order_updates(customer_id: str = None):
         }
     )
 
-@app.get("/orders/{order_id}")
+@app.get("/orders/{order_id}", dependencies=[Depends(verify_jwt)])
 async def get_order(order_id: str):
     try:
         with get_order_channel() as channel:
@@ -148,6 +157,13 @@ async def get_order(order_id: str):
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Order not found")
         raise HTTPException(status_code=503, detail=f"Order Service unavailable: {e.details()}")
+
+@app.get("/me")
+async def get_me(user: dict = Depends(verify_jwt), req_obj: Request = None):
+    return {
+        "user_id": req_obj.state.user_id,
+        "username": req_obj.state.username
+    }
 
 if __name__ == "__main__":
     import uvicorn
