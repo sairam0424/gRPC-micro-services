@@ -17,16 +17,14 @@ if DATABASE_URL and "sslmode=" in DATABASE_URL:
 # we need to ensure the URL is properly formatted.
 # SQLAlchemy asyncpg usually handles this via connect_args or query params.
 
+from sqlalchemy.pool import NullPool
+
 engine = create_async_engine(
     DATABASE_URL, 
     echo=True,
+    poolclass=NullPool,
     # Neon requires SSL. We explicitly set it for neon.tech hosts.
     connect_args={"ssl": "require"} if "neon.tech" in DATABASE_URL else {},
-    pool_size=5,
-    max_overflow=10,
-    pool_timeout=30,
-    pool_recycle=1800,
-    pool_pre_ping=True,
 )
 async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 Base = declarative_base()

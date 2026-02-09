@@ -9,7 +9,10 @@ dependencies = [
     "fastapi[standard]",
     "grpcio",
     "grpcio-tools",
-    "pydantic"
+    "pydantic",
+    "python-jose[cryptography]",
+    "python-dotenv",
+    "python-multipart>=0.0.7"
 ]
 requires-python = ">=3.10"
 
