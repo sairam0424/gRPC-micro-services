@@ -4,6 +4,21 @@ from pydantic import BaseModel
 import grpc
 import os
 import sys
+import logging
+from opentelemetry import trace, metrics, _logs
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.grpc import GrpcInstrumentorClient
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 
 # Ensure generated code is in the path
 GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
@@ -19,6 +34,36 @@ from .auth import verify_jwt
 # Configuration
 ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_ADDR", "localhost:50051")
 INVENTORY_SERVICE_ADDR = os.getenv("INVENTORY_SERVICE_ADDR", "localhost:50052")
+OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+
+# OpenTelemetry Setup
+resource = Resource.create({"service.name": "api-gateway"})
+
+# Tracing
+tracer_provider = TracerProvider(resource=resource)
+trace.set_tracer_provider(tracer_provider)
+tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)))
+
+# Metrics
+metric_reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True))
+meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+metrics.set_meter_provider(meter_provider)
+
+# Logs
+logger_provider = LoggerProvider(resource=resource)
+_logs.set_logger_provider(logger_provider)
+logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)))
+
+# Logging Instrumentation (for standard logs)
+LoggingInstrumentor().instrument(set_logging_format=True)
+handler = LoggingHandler(level=logging.INFO, logger_provider=logger_provider)
+logging.getLogger().addHandler(handler)
+
+# gRPC Client Instrumentation
+GrpcInstrumentorClient().instrument()
+
+# FastAPI Instrumentation
+FastAPIInstrumentor.instrument_app(app)
 
 class OrderItem(BaseModel):
     product_id: str
@@ -34,6 +79,10 @@ def get_order_channel():
 
 def get_inventory_channel():
     return grpc.insecure_channel(INVENTORY_SERVICE_ADDR)
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
 
 @app.get("/")
 async def root():
