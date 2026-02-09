@@ -14,38 +14,44 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+import { useAuth } from "@/context/auth-context";
+
 export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: (order: any) => void }) {
   const [customerId, setCustomerId] = useState("");
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState(1);
-  const [open, setOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { token } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: any) => {
     e.preventDefault();
-    setSubmitting(true);
+    setIsLoading(true);
     setError(null);
     try {
       const response = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
         body: JSON.stringify({
           customer_id: customerId,
           items: [
             {
               product_id: productId,
-              quantity: Number(quantity),
-              price: 100.0, // Mock price
-            },
-          ],
-        }),
+              quantity: quantity,
+              price: 10.0
+            }
+          ]
+        })
       });
 
       if (response.ok) {
         const data = await response.json();
         onOrderCreated(data);
-        setOpen(false);
+        setIsOpen(false);
         // Reset form
         setCustomerId("");
         setProductId("");
@@ -58,12 +64,12 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: (order: 
       console.error("Error creating order:", error);
       setError("Network error. Please try again.");
     } finally {
-      setSubmitting(false);
+      setIsLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button>Create Order</Button>
       </DialogTrigger>
@@ -123,8 +129,8 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: (order: 
             )}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating..." : "Create Order"}
+            <Button type="submit" disabled={isLoading}>
+              {isLoading ? "Creating..." : "Create Order"}
             </Button>
           </DialogFooter>
         </form>
