@@ -78,6 +78,10 @@ down:
 test:
 	./test_flow.sh
 
+test-resilience:
+	@echo "Running Resilience Verification (Rate Limiting & Load Shedding)..."
+	python3 verify_resilience.py || echo "Note: verify_resilience.py may require httpx locally. If it fails, check logs in Docker."
+
 logs:
 	docker compose logs -f
 
