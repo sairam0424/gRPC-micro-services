@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cinventory/v1/inventory.proto\x12\x0cinventory.v1\"\'\n\x11\x43heckStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\":\n\x12\x43heckStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\"S\n\x13ReserveStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"8\n\x14ReserveStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"S\n\x13ReleaseStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"\'\n\x14ReleaseStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"A\n\x12UpdateStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x17\n\x0fquantity_change\x18\x02 \x01(\x05\"?\n\x13UpdateStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x14\n\x0cnew_quantity\x18\x02 \x01(\x05\"5\n\rInventoryItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x32\xe5\x02\n\x10InventoryService\x12O\n\nCheckStock\x12\x1f.inventory.v1.CheckStockRequest\x1a .inventory.v1.CheckStockResponse\x12U\n\x0cReserveStock\x12!.inventory.v1.ReserveStockRequest\x1a\".inventory.v1.ReserveStockResponse\x12U\n\x0cReleaseStock\x12!.inventory.v1.ReleaseStockRequest\x1a\".inventory.v1.ReleaseStockResponse\x12R\n\x0bUpdateStock\x12 .inventory.v1.UpdateStockRequest\x1a!.inventory.v1.UpdateStockResponseB`Z^github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1;inventoryv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cinventory/v1/inventory.proto\x12\x0cinventory.v1\"\x16\n\x14ListInventoryRequest\"C\n\x15ListInventoryResponse\x12*\n\x05items\x18\x01 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"\'\n\x11\x43heckStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\":\n\x12\x43heckStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\"S\n\x13ReserveStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"8\n\x14ReserveStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"S\n\x13ReleaseStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"\'\n\x14ReleaseStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"A\n\x12UpdateStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x17\n\x0fquantity_change\x18\x02 \x01(\x05\"?\n\x13UpdateStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x14\n\x0cnew_quantity\x18\x02 \x01(\x05\"5\n\rInventoryItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x32\xbf\x03\n\x10InventoryService\x12O\n\nCheckStock\x12\x1f.inventory.v1.CheckStockRequest\x1a .inventory.v1.CheckStockResponse\x12U\n\x0cReserveStock\x12!.inventory.v1.ReserveStockRequest\x1a\".inventory.v1.ReserveStockResponse\x12U\n\x0cReleaseStock\x12!.inventory.v1.ReleaseStockRequest\x1a\".inventory.v1.ReleaseStockResponse\x12R\n\x0bUpdateStock\x12 .inventory.v1.UpdateStockRequest\x1a!.inventory.v1.UpdateStockResponse\x12X\n\rListInventory\x12\".inventory.v1.ListInventoryRequest\x1a#.inventory.v1.ListInventoryResponseB`Z^github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1;inventoryv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,24 +32,28 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'inventory.v1.inventory_pb2'
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z^github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1;inventoryv1'
-  _globals['_CHECKSTOCKREQUEST']._serialized_start=46
-  _globals['_CHECKSTOCKREQUEST']._serialized_end=85
-  _globals['_CHECKSTOCKRESPONSE']._serialized_start=87
-  _globals['_CHECKSTOCKRESPONSE']._serialized_end=145
-  _globals['_RESERVESTOCKREQUEST']._serialized_start=147
-  _globals['_RESERVESTOCKREQUEST']._serialized_end=230
-  _globals['_RESERVESTOCKRESPONSE']._serialized_start=232
-  _globals['_RESERVESTOCKRESPONSE']._serialized_end=288
-  _globals['_RELEASESTOCKREQUEST']._serialized_start=290
-  _globals['_RELEASESTOCKREQUEST']._serialized_end=373
-  _globals['_RELEASESTOCKRESPONSE']._serialized_start=375
-  _globals['_RELEASESTOCKRESPONSE']._serialized_end=414
-  _globals['_UPDATESTOCKREQUEST']._serialized_start=416
-  _globals['_UPDATESTOCKREQUEST']._serialized_end=481
-  _globals['_UPDATESTOCKRESPONSE']._serialized_start=483
-  _globals['_UPDATESTOCKRESPONSE']._serialized_end=546
-  _globals['_INVENTORYITEM']._serialized_start=548
-  _globals['_INVENTORYITEM']._serialized_end=601
-  _globals['_INVENTORYSERVICE']._serialized_start=604
-  _globals['_INVENTORYSERVICE']._serialized_end=961
+  _globals['_LISTINVENTORYREQUEST']._serialized_start=46
+  _globals['_LISTINVENTORYREQUEST']._serialized_end=68
+  _globals['_LISTINVENTORYRESPONSE']._serialized_start=70
+  _globals['_LISTINVENTORYRESPONSE']._serialized_end=137
+  _globals['_CHECKSTOCKREQUEST']._serialized_start=139
+  _globals['_CHECKSTOCKREQUEST']._serialized_end=178
+  _globals['_CHECKSTOCKRESPONSE']._serialized_start=180
+  _globals['_CHECKSTOCKRESPONSE']._serialized_end=238
+  _globals['_RESERVESTOCKREQUEST']._serialized_start=240
+  _globals['_RESERVESTOCKREQUEST']._serialized_end=323
+  _globals['_RESERVESTOCKRESPONSE']._serialized_start=325
+  _globals['_RESERVESTOCKRESPONSE']._serialized_end=381
+  _globals['_RELEASESTOCKREQUEST']._serialized_start=383
+  _globals['_RELEASESTOCKREQUEST']._serialized_end=466
+  _globals['_RELEASESTOCKRESPONSE']._serialized_start=468
+  _globals['_RELEASESTOCKRESPONSE']._serialized_end=507
+  _globals['_UPDATESTOCKREQUEST']._serialized_start=509
+  _globals['_UPDATESTOCKREQUEST']._serialized_end=574
+  _globals['_UPDATESTOCKRESPONSE']._serialized_start=576
+  _globals['_UPDATESTOCKRESPONSE']._serialized_end=639
+  _globals['_INVENTORYITEM']._serialized_start=641
+  _globals['_INVENTORYITEM']._serialized_end=694
+  _globals['_INVENTORYSERVICE']._serialized_start=697
+  _globals['_INVENTORYSERVICE']._serialized_end=1144
 # @@protoc_insertion_point(module_scope)

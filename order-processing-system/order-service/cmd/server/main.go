@@ -229,6 +229,17 @@ func main() {
 	go func() {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			db, err := database.DB.DB()
+			if err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				fmt.Fprintf(w, "database error: %v", err)
+				return
+			}
+			if err := db.Ping(); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				fmt.Fprintf(w, "database ping failed: %v", err)
+				return
+			}
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("healthy"))
 		})

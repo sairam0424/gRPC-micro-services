@@ -60,6 +60,7 @@ services:
       - grpc-net
     depends_on:
       - otel-collector
+      - redis
 
   order-streamer:
     build:
@@ -183,6 +184,49 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     depends_on:
       - kafka
+    networks:
+      - grpc-net
+
+  redis:
+    image: redis/redis-stack:latest
+    platform: linux/arm64
+    ports:
+      - "6379:6379"
+      - "8003:8001" # Redis Insight
+    environment:
+      - REDIS_ARGS=--requirepass bloompass --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - RI_STDOUT_LOGGER=true
+      - RI_APP_HOST=0.0.0.0
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    platform: linux/arm64
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=bloompass
+    ports:
+      - "9121:9121"
+    depends_on:
+      - redis
+    networks:
+      - grpc-net
+
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    platform: linux/arm64
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:bloompass
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
     networks:
       - grpc-net
 

@@ -22,6 +22,7 @@ import { useAuth } from "@/context/auth-context";
 import { UserNav } from "./user-nav";
 import { Package2 } from "lucide-react";
 import { CreateOrderDialog } from "@/components/create-order-dialog";
+import { FilterDashboard } from "@/components/filter-dashboard";
 
 export interface Order {
   order_id: string;
@@ -178,20 +179,27 @@ export default function Dashboard() {
             <h2 className="text-2xl font-semibold">Inventory</h2>
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
               <div className="space-y-4">
-                {['SKU-1001', 'SKU-1002', 'SKU-1003'].map((sku) => (
-                  <div key={sku} className="flex items-center justify-between border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium">{sku}</p>
-                      <p className="text-xs text-zinc-500">Reserved: 12 units</p>
+                {inventory.length === 0 ? (
+                  <p className="text-zinc-500 text-sm text-center py-4">Loading stock levels...</p>
+                ) : (
+                  inventory.map((item) => (
+                    <div key={item.product_id} className="flex items-center justify-between border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium">{item.product_id}</p>
+                        <p className="text-xs text-zinc-500">{item.name || `Product ${item.product_id}`}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-lg font-bold">{item.quantity}</p>
+                        <p className="text-[10px] uppercase font-bold text-zinc-500">Available</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-lg font-bold">120</p>
-                      <p className="text-[10px] uppercase font-bold text-zinc-500">Available</p>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
+
+            {/* Filter Monitoring */}
+            <FilterDashboard token={token} />
 
             {/* System Status Card */}
             <div className="rounded-2xl bg-gradient-to-br from-primary/10 to-transparent border border-primary/20 p-6">

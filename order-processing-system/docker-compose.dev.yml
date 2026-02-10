@@ -38,16 +38,20 @@ services:
     build:
       context: ./api-gateway
       dockerfile: Dockerfile
+    ports:
+      - "8100:8000"
     volumes:
       - ./api-gateway/src:/app/src
     environment:
       - ORDER_SERVICE_ADDR=order-service:50051
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
       - STREAM_SERVICE_ADDR=order-streamer:50053
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REDIS_PASSWORD=bloompass
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -58,6 +62,8 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - grpc-net
     develop:
@@ -71,13 +77,15 @@ services:
       context: ./auth-service
     ports:
       - "8002:8002"
+    volumes:
+      - ./auth-service/src:/app/src
     environment:
       - DATABASE_URL=${ORDER_DATABASE_URL}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8002 --reload
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -107,10 +115,11 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REDIS_PASSWORD=bloompass
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -119,6 +128,8 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - grpc-net
     develop:
@@ -214,7 +225,7 @@ services:
       - grpc-net
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.0.0
     ports:
       - "3100:3100"
     volumes:
@@ -304,6 +315,52 @@ services:
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
     depends_on:
       - kafka
+    networks:
+      - grpc-net
+
+  redis:
+    image: redis/redis-stack:latest
+    platform: linux/arm64
+    ports:
+      - "6379:6379"
+      - "8003:8001" # Redis Insight
+    environment:
+      - REDIS_ARGS=--requirepass bloompass --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - RI_STDOUT_LOGGER=true
+      - RI_APP_HOST=0.0.0.0
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    platform: linux/arm64
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=bloompass
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - grpc-net
+
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    platform: linux/arm64
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:bloompass
+    ports:
+      - "8082:8081" # Map to 8082 as 8081 is used by order-service health in some configs? Wait, order-service health is usually different. 
+      # Let's use 8084 for Redis Commander to be safe.
+    depends_on:
+      redis:
+        condition: service_healthy
     networks:
       - grpc-net
 
