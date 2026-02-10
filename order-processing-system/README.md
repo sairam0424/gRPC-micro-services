@@ -9,6 +9,8 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Order Streamer (Go)** consumes Kafka events and exposes a gRPC server-streaming API.
 - **Web Client (Next.js)** consumes REST + SSE to display live order updates.
 - **Nginx Proxy** routes `/` to the UI and `/api` to the gateway.
+- **Full Observability**: OpenTelemetry, Jaeger, Prometheus, Loki, and Grafana.
+- **Admin Visibility**: Kafka UI for message and topic monitoring.
 
 ## Architecture (At a Glance)
 
@@ -60,6 +62,35 @@ curl -X POST http://localhost/api/orders \
   -H "Content-Type: application/json" \
   -d '{"customer_id":"CUST-001","items":[{"product_id":"PROD-001","quantity":1,"price":100.0}]}'
 ```
+
+## Observability & Monitoring
+
+The system is equipped with a full observability stack:
+- **Jaeger**: Distributed tracing (`make jaeger`)
+- **Grafana**: Dashboards & Loki Logs (`make grafana`)
+- **Prometheus**: Metrics (`make prometheus`)
+- **Kafka UI**: Topic/Message monitoring (`make kafka-ui`)
+
+For setup details, see [Observability Documentation](docs/observability.md).
+
+## Full Tech Flow (How to Run)
+
+To run the entire stack and see the system in action:
+
+1. **Clean and Generate**:
+   ```bash
+   make clean generate
+   ```
+2. **Launch Stack**:
+   ```bash
+   make up-dev
+   ```
+3. **Seed Data**: (Generate activity for monitoring)
+   ```bash
+   make seed
+   ```
+4. **Observe**:
+   Open monitoring tools using `make jaeger`, `make grafana`, or `make kafka-ui`.
 
 ## Quick Start (Docker)
 ```bash
@@ -168,8 +199,19 @@ order-processing-system/
 - Authentication/authorization is not implemented yet.
 - Inventory listing in the gateway is currently a placeholder.
 
-## Makefile
-- `make generate` -> gRPC code generation for Python/Go
-- `make up` -> Docker Compose (prod-style)
-- `make up-dev` -> Docker Compose with hot reload
-- `make down` -> stop services
+## Makefile Targets
+
+| Command | Description |
+| :--- | :--- |
+| `make generate` | Generate gRPC code for Go & Python, then tidy dependencies |
+| `make up` | Start stack in background (Standard) |
+| `make up-dev` | Start stack in development mode (Hot Reload) |
+| `make down` | Stop all containers |
+| `make seed` | Generate 10 random orders to test the system flow |
+| `make test` | Run the standard end-to-end test flow |
+| `make status` | Show status of all microservices and monitoring tools |
+| `make logs` | Follow logs from all services |
+| `make jaeger` | Open Jaeger UI (`:16686`) |
+| `make prometheus`| Open Prometheus UI (`:9090`) |
+| `make grafana` | Open Grafana UI (`:3000`) |
+| `make kafka-ui` | Open Kafka UI (`:8080`) |

@@ -1,3 +1,21 @@
+import os
+import sys
+import logging
+from opentelemetry import trace, metrics, _logs
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlmodel import Session, select
@@ -7,11 +25,49 @@ from pydantic import BaseModel
 from .models import User, engine, init_db, get_session
 from .security import get_password_hash, verify_password, create_access_token
 
-app = FastAPI(title="Auth Service", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # OpenTelemetry Setup
+    OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+    resource = Resource.create({"service.name": "auth-service"})
+
+    # Tracing
+    tracer_provider = TracerProvider(resource=resource)
+    trace.set_tracer_provider(tracer_provider)
+    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)))
+
+    # Metrics
+    metric_reader = PeriodicExportingMetricReader(OTLPMetricExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True))
+    meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
+    metrics.set_meter_provider(meter_provider)
+
+    # Logs
+    logger_provider = LoggerProvider(resource=resource)
+    _logs.set_logger_provider(logger_provider)
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)))
+
+    # Logging Instrumentation
+    LoggingInstrumentor().instrument(set_logging_format=True)
+    handler = LoggingHandler(level=logging.INFO, logger_provider=logger_provider)
+    logging.getLogger().addHandler(handler)
+
+    FastAPIInstrumentor.instrument_app(app)
+
+    # Startup
+    init_db() # Assuming create_db_and_tables() was a typo and init_db() is intended
+    yield
+    # Shutdown
+    FastAPIInstrumentor.uninstrument_app(app)
+    tracer_provider.shutdown()
+    meter_provider.shutdown()
+    logger_provider.shutdown()
+
+app = FastAPI(title="Auth Service", version="0.1.0", lifespan=lifespan)
 
 @app.on_event("startup")
 def on_startup():
-    init_db()
+    # init_db() # Moved to lifespan
+    pass
 
 class UserCreate(BaseModel):
     username: str
