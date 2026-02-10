@@ -3,7 +3,7 @@ import logging
 import asyncio
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from . import crud
-from .database import async_session
+from .database import writer_session
 from .bloom_filter import filter_manager
 from .cache import cache_manager
 
@@ -100,7 +100,7 @@ class KafkaManager:
                 await self.producer.send_and_wait(self.topic_out, response_event)
                 return
 
-        async with async_session() as session:
+        async with writer_session() as session:
             try:
                 success, message = await crud.reserve_stock_atomic(session, order_id, req_items)
                 

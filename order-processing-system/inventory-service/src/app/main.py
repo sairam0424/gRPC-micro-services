@@ -28,7 +28,7 @@ GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
 sys.path.append(GENERATED_DIR)
 
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
-from .database import init_db, get_db, async_session
+from .database import init_db, get_db, writer_session, reader_session
 from .models import InventoryItem
 from .bloom_filter import filter_manager
 from .cache import cache_manager
@@ -69,7 +69,7 @@ GrpcInstrumentorClient().instrument()
 
 # Seed initial data
 async def seed_data():
-    async with async_session() as session:
+    async with writer_session() as session:
         result = await session.execute(select(InventoryItem).limit(1))
         if not result.scalar():
             logger.info("Seeding initial inventory data...")
@@ -99,17 +99,17 @@ async def lifespan(app: FastAPI):
         if filter_manager.redis_client.set(lock_key, "locked", nx=True, ex=60):
             try:
                 logger.info("Acquired seeding lock. Starting Bloom/Cuckoo filter population...")
-                async with async_session() as session:
+                async with reader_session() as session:
                     # We need to import crud here or ensure it's available
                     from . import crud
                     items = await crud.get_all_inventory(session)
                     filter_manager.sync_from_db(items)
                     
-                    # Asynchronously warm the cache
+                    # Asynchronously warm the cache from replica
                     for item in items:
                         cache_manager.set_stock(item.product_id, item.quantity)
                         
-                logger.info("Bloom/Cuckoo filters and Cache successfully populated.")
+                logger.info("Bloom/Cuckoo filters and Cache successfully populated from REPLICA.")
             except Exception as e:
                 logger.error(f"Seeding failed: {e}")
             finally:
@@ -122,15 +122,15 @@ async def lifespan(app: FastAPI):
 
     # Cache Warming Task (Industry Practice)
     async def cache_warming():
-        logger.info("Starting industry-standard Cache Warming pipeline...")
-        async with async_session() as session:
+        logger.info("Starting industry-standard Cache Warming pipeline from REPLICA...")
+        async with reader_session() as session:
             from . import crud
             # Warm cache with Top 100 items (or all for this demo)
             items = await crud.get_all_inventory(session)
             if items:
                 for item in items:
                     cache_manager.set_stock(item.product_id, item.quantity)
-                logger.info(f"Cache Warming complete. {len(items)} items warmed.")
+                logger.info(f"Cache Warming complete via Replica. {len(items)} items warmed.")
             else:
                 logger.info("No items found to warm cache.")
 
@@ -178,7 +178,7 @@ async def health():
 
     # Check Database
     try:
-        async with async_session() as session:
+        async with writer_session() as session:
             await session.execute(text("SELECT 1"))
         health_status["checks"]["database"] = "connected"
     except Exception as e:
@@ -224,7 +224,8 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
             if cached_qty is not None:
                 return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=cached_qty)
 
-            async with async_session() as session:
+            # Route eventual consistency read to REPLICA
+            async with reader_session() as session:
                 item = await crud.get_inventory_item(session, request.product_id)
                 quantity = item.quantity if item else 0
                 
@@ -253,7 +254,8 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                     message=f"Insufficient stock for {item.product_id} (cached check)"
                 )
 
-        async with async_session() as session:
+        # Route strong consistency reservation to LEADER
+        async with writer_session() as session:
             try:
                 success, message, reserved_items = await crud.reserve_stock_atomic(session, request.order_id, request.items)
                 if success:
@@ -267,7 +269,7 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 return inventory_pb2.ReserveStockResponse(success=False, message=str(e))
 
     async def ReleaseStock(self, request, context):
-        async with async_session() as session:
+        async with writer_session() as session:
             try:
                 await crud.release_stock_atomic(session, request.order_id, request.items)
                 # For release, we'd need to fetch current quantities to be precise, 
@@ -285,7 +287,7 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 return inventory_pb2.ReleaseStockResponse(success=False)
 
     async def UpdateStock(self, request, context):
-        async with async_session() as session:
+        async with writer_session() as session:
             try:
                 db_item = await crud.update_stock_level(session, request.product_id, request.quantity_change)
                 # Always publish update event
@@ -299,7 +301,8 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 context.abort(grpc.StatusCode.INTERNAL, str(e))
 
     async def ListInventory(self, request, context):
-        async with async_session() as session:
+        # Route eventual consistency list to REPLICA
+        async with reader_session() as session:
             try:
                 items = await crud.get_all_inventory(session)
                 return inventory_pb2.ListInventoryResponse(
