@@ -2,6 +2,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from .models import InventoryItem
+from .bloom_filter import filter_manager
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,8 @@ async def reserve_stock_atomic(db: AsyncSession, order_id: str, items: list):
     # All items are available and locked, proceed to deduct
     for db_item, qty in items_to_reserve:
         db_item.quantity -= qty
+        if db_item.quantity == 0:
+            filter_manager.update_stock_status(db_item.product_id, False)
         
     await db.commit()
     return True, "Stock reserved successfully"
@@ -55,6 +58,8 @@ async def release_stock_atomic(db: AsyncSession, order_id: str, items: list):
             .where(InventoryItem.product_id == item_req.product_id)
             .values(quantity=InventoryItem.quantity + item_req.quantity)
         )
+        # Re-enable in-stock filter
+        filter_manager.update_stock_status(item_req.product_id, True)
     await db.commit()
     return True
 
@@ -72,8 +77,12 @@ async def update_stock_level(db: AsyncSession, product_id: str, change: int):
             quantity=max(0, change)
         )
         db.add(db_item)
+        # Add to catalog and update stock status
+        filter_manager.add_to_catalog(product_id)
+        filter_manager.update_stock_status(product_id, db_item.quantity > 0)
     else:
         db_item.quantity = max(0, db_item.quantity + change)
+        filter_manager.update_stock_status(product_id, db_item.quantity > 0)
         
     await db.commit()
     return db_item

@@ -38,6 +38,8 @@ services:
     build:
       context: ./api-gateway
       dockerfile: Dockerfile
+    ports:
+      - "8100:8000"
     volumes:
       - ./api-gateway/src:/app/src
     environment:
@@ -45,6 +47,7 @@ services:
       - STREAM_SERVICE_ADDR=order-streamer:50053
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REDIS_PASSWORD=bloompass
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
@@ -58,6 +61,8 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - grpc-net
     develop:
@@ -71,6 +76,8 @@ services:
       context: ./auth-service
     ports:
       - "8002:8002"
+    volumes:
+      - ./auth-service/src:/app/src
     environment:
       - DATABASE_URL=${ORDER_DATABASE_URL}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
@@ -107,6 +114,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REDIS_PASSWORD=bloompass
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
@@ -119,6 +127,8 @@ services:
         condition: service_healthy
       otel-collector:
         condition: service_started
+      redis:
+        condition: service_healthy
     networks:
       - grpc-net
     develop:
@@ -214,7 +224,7 @@ services:
       - grpc-net
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.0.0
     ports:
       - "3100:3100"
     volumes:
@@ -306,6 +316,21 @@ services:
       - kafka
     networks:
       - grpc-net
+
+  redis:
+    image: redis/redis-stack-server:latest
+    ports:
+      - "6379:6379"
+      - "8003:8001" # Redis Insight
+    environment:
+      - REDIS_ARGS=--requirepass bloompass
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
 
 networks:

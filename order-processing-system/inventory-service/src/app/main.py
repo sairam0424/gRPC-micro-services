@@ -19,9 +19,9 @@ from opentelemetry.instrumentation.grpc import GrpcInstrumentorServer, GrpcInstr
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from concurrent import futures
 import grpc
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, text
 
 # Ensure generated code is in the path
 GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
@@ -30,6 +30,7 @@ sys.path.append(GENERATED_DIR)
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
 from .database import init_db, get_db, async_session
 from .models import InventoryItem
+from .bloom_filter import filter_manager
 
 from contextlib import asynccontextmanager
 
@@ -86,7 +87,38 @@ async def lifespan(app: FastAPI):
     # Startup logic
     FastAPIInstrumentor.instrument_app(app)
     await init_db()
-    # await seed_data()
+
+    # Initialize Bloom/Cuckoo Filters structure
+    filter_manager.init_filters()
+    
+    # Background Seeding Task
+    async def background_seeding():
+        lock_key = "lock:filter_seeding"
+        # Try to acquire lock for 30 seconds
+        if filter_manager.redis_client.set(lock_key, "locked", nx=True, ex=60):
+            try:
+                logger.info("Acquired seeding lock. Starting Bloom/Cuckoo filter population...")
+                async with async_session() as session:
+                    items = await crud.get_all_inventory(session)
+                    filter_manager.sync_from_db(items)
+                logger.info("Bloom/Cuckoo filters successfully populated from database.")
+            except Exception as e:
+                logger.error(f"Seeding failed: {e}")
+            finally:
+                filter_manager.redis_client.delete(lock_key)
+        else:
+            logger.info("Another instance is already seeding filters. Skipping.")
+
+    # Run seeding in background to not block app startup
+    asyncio.create_task(background_seeding())
+
+    # Periodic Sync Task (Industry Practice)
+    async def periodic_sync():
+        while True:
+            await asyncio.sleep(600) # Sync every 10 mins
+            await background_seeding()
+    
+    asyncio.create_task(periodic_sync())
     
     kafka_brokers = os.getenv("KAFKA_BROKERS", "kafka:29092")
     app.state.kafka = KafkaManager(kafka_brokers, "order-events", "order-events")
@@ -116,8 +148,34 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Inventory Service API", version="0.1.0", lifespan=lifespan)
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy"}
+async def health():
+    health_status = {"status": "ok", "checks": {}}
+    overall_status = True
+
+    # Check Database
+    try:
+        async with async_session() as session:
+            await session.execute(text("SELECT 1"))
+        health_status["checks"]["database"] = "connected"
+    except Exception as e:
+        logger.error(f"DB Health check failed: {e}")
+        health_status["checks"]["database"] = f"failed: {str(e)}"
+        overall_status = False
+
+    # Check Redis
+    try:
+        filter_manager.redis_client.ping()
+        health_status["checks"]["redis"] = "connected"
+    except Exception as e:
+        logger.error(f"Redis Health check failed: {e}")
+        health_status["checks"]["redis"] = f"failed: {str(e)}"
+        overall_status = False
+
+    if not overall_status:
+        health_status["status"] = "error"
+        raise HTTPException(status_code=503, detail=health_status)
+    
+    return health_status
 
 @app.get("/inventory")
 async def list_inventory(db: AsyncSession = Depends(get_db)):
@@ -136,6 +194,15 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
             return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=quantity)
 
     async def ReserveStock(self, request, context):
+        # Tier-2 Bloom Filter Check: Is the product likely in stock?
+        for item in request.items:
+            if not filter_manager.is_in_stock(item.product_id):
+                logger.info(f"Bloom Filter Reject (Tier-2): Product {item.product_id} likely out of stock")
+                return inventory_pb2.ReserveStockResponse(
+                    success=False, 
+                    message=f"Product {item.product_id} is likely out of stock (Tier-2 check)"
+                )
+
         async with async_session() as session:
             try:
                 success, message = await crud.reserve_stock_atomic(session, request.order_id, request.items)

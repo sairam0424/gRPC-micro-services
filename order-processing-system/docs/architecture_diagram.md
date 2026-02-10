@@ -15,6 +15,7 @@ graph TD
     subgraph "Infrastructure"
         Proxy["Nginx (Reverse Proxy)"]
         KafkaBroker["Kafka (Message Broker)"]
+        Redis["Redis Stack (Filters)"]
     end
     
     subgraph "Microservices"
@@ -34,10 +35,13 @@ graph TD
     Client ---|HTTP/HTTPS| Proxy
     Proxy ---|Route: /| WebClient
     Proxy ---|Route: /api| APIGateway
+    
+    APIGateway ---|Tier-1: BF.EXISTS| Redis
     APIGateway ---|gRPC| OrderService
     APIGateway ---|gRPC| InventoryService
     APIGateway ---|SSE: /orders/events| OrderStreamer
     
+    InventoryService ---|Tier-2: CF.EXISTS| Redis
     OrderService ---|gRPC: ReserveStock| InventoryService
     OrderService ---|Publish Event| KafkaBroker
     KafkaBroker ---|Consume Event| OrderStreamer
@@ -50,6 +54,7 @@ graph TD
     style Client fill:#f9f,stroke:#333,stroke-width:2px
     style Proxy fill:#69f,stroke:#333,stroke-width:2px
     style KafkaBroker fill:#fef,stroke:#333
+    style Redis fill:#ff3399,stroke:#333,stroke-width:2px
     style APIGateway fill:#6f9,stroke:#333,stroke-width:2px
     style OrderService fill:#f96,stroke:#333,stroke-width:2px
     style OrderStreamer fill:#ff9999,stroke:#333,stroke-width:2px
