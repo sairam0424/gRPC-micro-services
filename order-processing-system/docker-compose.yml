@@ -188,12 +188,15 @@ services:
       - grpc-net
 
   redis:
-    image: redis/redis-stack-server:latest
+    image: redis/redis-stack:latest
+    platform: linux/arm64
     ports:
       - "6379:6379"
       - "8003:8001" # Redis Insight
     environment:
       - REDIS_ARGS=--requirepass bloompass --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - RI_STDOUT_LOGGER=true
+      - RI_APP_HOST=0.0.0.0
     networks:
       - grpc-net
     healthcheck:

@@ -55,6 +55,11 @@ class InventoryServiceStub(object):
                 request_serializer=inventory_dot_v1_dot_inventory__pb2.UpdateStockRequest.SerializeToString,
                 response_deserializer=inventory_dot_v1_dot_inventory__pb2.UpdateStockResponse.FromString,
                 _registered_method=True)
+        self.ListInventory = channel.unary_unary(
+                '/inventory.v1.InventoryService/ListInventory',
+                request_serializer=inventory_dot_v1_dot_inventory__pb2.ListInventoryRequest.SerializeToString,
+                response_deserializer=inventory_dot_v1_dot_inventory__pb2.ListInventoryResponse.FromString,
+                _registered_method=True)
 
 
 class InventoryServiceServicer(object):
@@ -90,6 +95,13 @@ class InventoryServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListInventory(self, request, context):
+        """ListInventory returns all items in the inventory.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_InventoryServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -112,6 +124,11 @@ def add_InventoryServiceServicer_to_server(servicer, server):
                     servicer.UpdateStock,
                     request_deserializer=inventory_dot_v1_dot_inventory__pb2.UpdateStockRequest.FromString,
                     response_serializer=inventory_dot_v1_dot_inventory__pb2.UpdateStockResponse.SerializeToString,
+            ),
+            'ListInventory': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListInventory,
+                    request_deserializer=inventory_dot_v1_dot_inventory__pb2.ListInventoryRequest.FromString,
+                    response_serializer=inventory_dot_v1_dot_inventory__pb2.ListInventoryResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -223,6 +240,33 @@ class InventoryService(object):
             '/inventory.v1.InventoryService/UpdateStock',
             inventory_dot_v1_dot_inventory__pb2.UpdateStockRequest.SerializeToString,
             inventory_dot_v1_dot_inventory__pb2.UpdateStockResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListInventory(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/inventory.v1.InventoryService/ListInventory',
+            inventory_dot_v1_dot_inventory__pb2.ListInventoryRequest.SerializeToString,
+            inventory_dot_v1_dot_inventory__pb2.ListInventoryResponse.FromString,
             options,
             channel_credentials,
             insecure,
