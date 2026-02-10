@@ -44,13 +44,14 @@ services:
       - ./api-gateway/src:/app/src
     environment:
       - ORDER_SERVICE_ADDR=order-service:50051
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
       - STREAM_SERVICE_ADDR=order-streamer:50053
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - REDIS_PASSWORD=bloompass
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -84,7 +85,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8002 --reload
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -118,7 +119,7 @@ services:
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
-      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -318,12 +319,15 @@ services:
       - grpc-net
 
   redis:
-    image: redis/redis-stack-server:latest
+    image: redis/redis-stack:latest
+    platform: linux/arm64
     ports:
       - "6379:6379"
       - "8003:8001" # Redis Insight
     environment:
       - REDIS_ARGS=--requirepass bloompass --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - RI_STDOUT_LOGGER=true
+      - RI_APP_HOST=0.0.0.0
     networks:
       - grpc-net
     healthcheck:

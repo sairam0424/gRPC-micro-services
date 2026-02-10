@@ -297,3 +297,18 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
             except Exception as e:
                 await session.rollback()
                 context.abort(grpc.StatusCode.INTERNAL, str(e))
+
+    async def ListInventory(self, request, context):
+        async with async_session() as session:
+            try:
+                items = await crud.get_all_inventory(session)
+                return inventory_pb2.ListInventoryResponse(
+                    items=[
+                        inventory_pb2.InventoryItem(
+                            product_id=item.product_id,
+                            quantity=item.quantity
+                        ) for item in items
+                    ]
+                )
+            except Exception as e:
+                context.abort(grpc.StatusCode.INTERNAL, str(e))

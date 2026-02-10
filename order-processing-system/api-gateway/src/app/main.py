@@ -41,6 +41,8 @@ ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_ADDR", "localhost:50051")
 INVENTORY_SERVICE_ADDR = os.getenv("INVENTORY_SERVICE_ADDR", "localhost:50052")
 OTEL_EXPORTER_OTLP_ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
 
+logger.info(f"API Gateway starting with Order Service: {ORDER_SERVICE_ADDR}, Inventory Service: {INVENTORY_SERVICE_ADDR}")
+
 # OpenTelemetry Setup
 resource = Resource.create({"service.name": "api-gateway"})
 
@@ -133,11 +135,18 @@ async def list_inventory():
     try:
         with get_inventory_channel() as channel:
             stub = inventory_pb2_grpc.InventoryServiceStub(channel)
-            # We don't have a ListInventory in gRPC yet, but we can check a few known ones 
-            # or just rely on the REST API of inventory-service.
-            # For simplicity, let's assume we want to check a specific product or a list
-            return {"message": "Inventory management via gRPC active"}
+            rpc_request = inventory_pb2.ListInventoryRequest()
+            response = stub.ListInventory(rpc_request)
+            return {
+                "inventory": [
+                    {
+                        "product_id": item.product_id,
+                        "quantity": item.quantity
+                    } for item in response.items
+                ]
+            }
     except Exception as e:
+        logger.error(f"Inventory Service gRPC call failed: {e}")
         raise HTTPException(status_code=503, detail=f"Inventory Service unavailable: {e}")
 
 @app.get("/metrics/filters")
@@ -219,7 +228,12 @@ from .streaming import order_status_streamer
 from fastapi.responses import StreamingResponse
 
 @app.get("/orders/events")
-async def stream_order_updates(customer_id: Optional[str] = None, user: dict = Depends(verify_jwt), req_obj: Request = None):
+async def stream_order_updates(
+    customer_id: Optional[str] = None, 
+    token: Optional[str] = None,
+    user: dict = Depends(verify_jwt), 
+    req_obj: Request = None
+):
     """
     Server-Sent Events (SSE) endpoint for real-time order status updates.
     """

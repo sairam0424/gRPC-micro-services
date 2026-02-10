@@ -20,6 +20,7 @@ The service is configured via environment variables in the project's root `.env`
 - `INVENTORY_SERVICE_PORT`: Port for the FastAPI server (default: 8001).
 - `GRPC_PORT`: Port for the gRPC server (default: 50052).
 - `REDIS_HOST`: Host for the Redis server (default: `redis`).
+- `REDIS_USERNAME` : User name used for the redis-insight (default: `default`)
 - `REDIS_PORT`: Port for the Redis server (default: `6379`).
 - `REDIS_PASSWORD`: Password for Redis (default: `bloompass`).
 
