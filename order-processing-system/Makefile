@@ -1,4 +1,4 @@
-.PHONY: generate clean build-python build-go up down up-dev tidy test jaeger prometheus grafana loki kafka-ui restart logs seed status help
+.PHONY: generate clean build-python build-go up down up-dev tidy test jaeger prometheus grafana loki kafka-ui cdc-setup restart logs seed status help
 
 PROTOC_GEN_GO := $(shell which protoc-gen-go)
 PROTOC_GEN_GO_GRPC := $(shell which protoc-gen-go-grpc)
@@ -96,6 +96,10 @@ prometheus:
 
 grafana:
 	open http://localhost:3000
+
+cdc-setup:
+	@echo "Setting up Debezium Postgres Connector..."
+	curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d @infra/debezium/postgres-connector.json
 
 loki:
 	@echo "Loki logs are best viewed in Grafana (http://localhost:3000)"
