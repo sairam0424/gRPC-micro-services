@@ -48,7 +48,7 @@ async def reserve_stock_atomic(db: AsyncSession, order_id: str, items: list):
             filter_manager.update_stock_status(db_item.product_id, False)
         
     await db.commit()
-    return True, "Stock reserved successfully"
+    return True, "Stock reserved successfully", items_to_reserve
 
 async def release_stock_atomic(db: AsyncSession, order_id: str, items: list):
     """Restore stock levels."""
