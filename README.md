@@ -1,6 +1,6 @@
 # Order Processing System (gRPC Microservices)
 
-A production-style, event-driven order platform built with gRPC, FastAPI, Go, Kafka, and a Next.js dashboard. It demonstrates REST-to-gRPC bridging, inventory reservation with ACID guarantees, and real-time order status updates via Kafka + gRPC streaming + SSE.
+A production-style, event-driven order platform built with gRPC, FastAPI, Go, Kafka, and a Next.js dashboard. It demonstrates REST-to-gRPC bridging, inventory reservation with ACID guarantees, and real-time order status updates via Kafka + gRPC streaming + SSE with observability stack (Jaeger - Distributed Tracing , Open Telementary - Telementary Standard , Grafana - Dashboards , Prometheus - Metrics )
 
 ## Highlights
 - **API Gateway (FastAPI)** exposes REST endpoints and bridges to gRPC services.
