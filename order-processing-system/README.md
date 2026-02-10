@@ -3,9 +3,10 @@
 A production-style, event-driven order platform built with gRPC, FastAPI, Go, Kafka, and a Next.js dashboard. It demonstrates REST-to-gRPC bridging, inventory reservation with ACID guarantees, and real-time order status updates via Kafka + gRPC streaming + SSE.
 
 ## Highlights
-- **API Gateway (FastAPI)** exposes REST endpoints and bridges to gRPC services.
+- **API Gateway (FastAPI)** exposes REST endpoints and bridges to gRPC services, now with a **Tier-1 Bloom Filter** for catalog existence pre-filtering.
 - **Order Service (Go)** persists orders and publishes events to Kafka.
-- **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL (Neon-ready).
+- **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL, now with a **Tier-2 Cuckoo Filter** for fast in-stock checks.
+- **Redis Stack** provides the backbone for the Bloom and Cuckoo filters.
 - **Order Streamer (Go)** consumes Kafka events and exposes a gRPC server-streaming API.
 - **Web Client (Next.js)** consumes REST + SSE to display live order updates.
 - **Nginx Proxy** routes `/` to the UI and `/api` to the gateway.
@@ -21,6 +22,8 @@ graph TD
     Proxy --> API[FastAPI API Gateway]
     API -->|gRPC| Order[Order Service]
     API -->|gRPC| Inventory[Inventory Service]
+    API -->|Check BF| Redis[(Redis Stack)]
+    Inventory -->|Check CF| Redis
     Order -->|Kafka| Kafka[(Kafka)]
     Inventory -->|Kafka| Kafka
     Kafka --> Streamer[Order Streamer]
@@ -49,12 +52,19 @@ graph TD
 ## REST API (via API Gateway)
 Base URL: `http://localhost/api`
 
-- `GET /` -> gateway health response
+- `GET /health` -> advanced gateway health (checks all dependencies)
 - `POST /orders` -> create order
 - `GET /orders` -> list orders (`customer_id` optional)
 - `GET /orders/{order_id}` -> fetch order
 - `GET /orders/events` -> SSE stream of live updates
 - `GET /inventory` -> gateway inventory check (placeholder)
+
+### Health Check Endpoints (Direct)
+- `GET /api/auth/health` -> Auth Service (DB check)
+- `GET /api/inventory/health` -> Inventory Service (DB & Redis check)
+- `GET /api/orders/health` -> Order Service (DB check)
+- `GET /api/streamer/health` -> Order Streamer (Kafka check)
+- `GET /api/health` -> API Gateway (Dependency health summary)
 
 Example (create order):
 ```bash

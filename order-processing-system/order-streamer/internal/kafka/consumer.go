@@ -64,6 +64,16 @@ func (c *Consumer) Start(ctx context.Context) {
 	}
 }
 
+func (c *Consumer) Ping(ctx context.Context) error {
+	// Just check if we can dial the first broker
+	conn, err := kafka.DialContext(ctx, "tcp", c.reader.Config().Brokers[0])
+	if err != nil {
+		return err
+	}
+	conn.Close()
+	return nil
+}
+
 func (c *Consumer) Close() error {
 	return c.reader.Close()
 }

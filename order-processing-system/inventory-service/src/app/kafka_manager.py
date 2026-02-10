@@ -4,6 +4,7 @@ import asyncio
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from . import crud
 from .database import async_session
+from .bloom_filter import filter_manager
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,21 @@ class KafkaManager:
                 self.quantity = quantity
 
         req_items = [ItemReq(i["product_id"], i["quantity"]) for i in items]
+        
+        # Tier-2 Bloom Filter Check: Is the product likely in stock?
+        for item in req_items:
+            if not filter_manager.is_in_stock(item.product_id):
+                logger.info(f"Bloom Filter Reject (Tier-2): Product {item.product_id} likely out of stock for order {order_id}")
+                response_event = {
+                    "event_type": "inventory.failed",
+                    "order_id": order_id,
+                    "customer_id": customer_id,
+                    "status": "FAILED",
+                    "message": f"Product {item.product_id} is likely out of stock (Tier-2 check)",
+                    "items": items
+                }
+                await self.producer.send_and_wait(self.topic_out, response_event)
+                return
 
         async with async_session() as session:
             try:

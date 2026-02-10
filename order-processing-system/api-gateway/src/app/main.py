@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
+import httpx
 from typing import List, Optional
 from pydantic import BaseModel
 import grpc
@@ -27,9 +28,13 @@ sys.path.append(GENERATED_DIR)
 from order.v1 import order_pb2, order_pb2_grpc
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
 
+# Logger
+logger = logging.getLogger(__name__)
+
 app = FastAPI(title="Order Processing API Gateway", root_path="/api")
 
 from .auth import verify_jwt
+from .bloom_filter import bloom_manager
 
 # Configuration
 ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_ADDR", "localhost:50051")
@@ -82,7 +87,42 @@ def get_inventory_channel():
 
 @app.get("/health")
 async def health():
-    return {"status": "healthy"}
+    health_status = {"status": "ok", "dependencies": {}}
+    overall_status = True
+
+    async def check_url(name, url):
+        nonlocal overall_status
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, timeout=2.0)
+                if resp.status_code == 200:
+                    health_status["dependencies"][name] = "healthy"
+                else:
+                    health_status["dependencies"][name] = f"unhealthy (status {resp.status_code})"
+                    overall_status = False
+        except Exception as e:
+            health_status["dependencies"][name] = f"error: {str(e)}"
+            overall_status = False
+
+    # Check Auth Service
+    await check_url("auth-service", f"http://{os.getenv('AUTH_SERVICE_HOST', 'auth-service')}:8002/health")
+    
+    # Check Inventory Service
+    await check_url("inventory-service", f"http://{os.getenv('INVENTORY_SERVICE_HOST', 'inventory-service')}:8001/health")
+
+    # Check Redis
+    try:
+        bloom_manager.redis_client.ping()
+        health_status["dependencies"]["redis"] = "healthy"
+    except Exception as e:
+        health_status["dependencies"]["redis"] = f"error: {str(e)}"
+        overall_status = False
+
+    if not overall_status:
+        health_status["status"] = "error"
+        raise HTTPException(status_code=503, detail=health_status)
+
+    return health_status
 
 @app.get("/")
 async def root():
@@ -96,17 +136,28 @@ async def list_inventory():
             # We don't have a ListInventory in gRPC yet, but we can check a few known ones 
             # or just rely on the REST API of inventory-service.
             # For simplicity, let's assume we want to check a specific product or a list
-            # In a real system, we'd add ListInventory to proto.
-            # For now, let's just provide a health check or a placeholder.
             return {"message": "Inventory management via gRPC active"}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Inventory Service unavailable: {e}")
+
+@app.get("/metrics/filters")
+async def get_filter_metrics():
+    return bloom_manager.get_metrics()
 
 @app.post("/orders")
 async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_jwt), req_obj: Request = None):
     # Use the verified user_id instead of whatever the client sent for safety
     customer_id = req_obj.state.user_id if req_obj else request.customer_id
     
+    # Tier-1 Bloom Filter Check: Is the product in the catalog?
+    for item in request.items:
+        if not bloom_manager.is_present(item.product_id):
+            logger.warning(f"Bloom Filter Reject (Tier-1): Product {item.product_id} not in catalog")
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Product {item.product_id} is invalid or not found in our catalog."
+            )
+
     try:
         with get_order_channel() as channel:
             stub = order_pb2_grpc.OrderServiceStub(channel)
