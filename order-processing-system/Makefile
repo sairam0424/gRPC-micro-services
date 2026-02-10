@@ -1,7 +1,12 @@
-.PHONY: generate clean build-python build-go up down up-dev
+.PHONY: generate clean build-python build-go up down up-dev tidy test jaeger prometheus grafana loki kafka-ui restart logs seed status help
 
 PROTOC_GEN_GO := $(shell which protoc-gen-go)
 PROTOC_GEN_GO_GRPC := $(shell which protoc-gen-go-grpc)
+
+tidy:
+	@echo "Tidying Go modules..."
+	cd order-service && go mod tidy
+	cd order-streamer && go mod tidy
 
 generate:
 	@echo "Generating Python gRPC code..."
@@ -49,17 +54,79 @@ generate:
 	@echo "Validating OpenAPI spec with go-swagger..."
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \
 	swagger validate order-service/pkg/generated/order/v1/order.swagger.json
+	$(MAKE) tidy
 
 clean:
 	rm -rf api-gateway/src/generated/*
 	rm -rf order-service/pkg/generated/*
 	rm -rf order-streamer/pkg/generated/*
+	rm -rf inventory-service/src/generated/*
 
 up:
-	docker compose up --build
+	docker compose up --build -d
 
 up-dev:
+# 	docker compose -f docker-compose.dev.yml up --build -d
 	docker compose -f docker-compose.dev.yml up --build
+
+restart:
+	docker compose restart
 
 down:
 	docker compose down
+
+test:
+	./test_flow.sh
+
+logs:
+	docker compose logs -f
+
+seed:
+	./scripts/seed_data.sh
+
+status:
+	docker compose ps
+
+# Observability UIs (MacOS specific open command)
+jaeger:
+	open http://localhost:16686
+
+prometheus:
+	open http://localhost:9090
+
+grafana:
+	open http://localhost:3000
+
+loki:
+	@echo "Loki logs are best viewed in Grafana (http://localhost:3000)"
+	@echo "Direct API: http://localhost:3100"
+	open http://localhost:3000
+
+kafka-ui:
+	open http://localhost:8080
+
+help:
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Build & Run:"
+	@echo "  generate     - Generate gRPC code"
+	@echo "  up           - Start entire stack in background"
+	@echo "  up-dev       - Start stack in dev mode (hot-reload)"
+	@echo "  down         - Stop all services"
+	@echo "  restart      - Restart all services"
+	@echo "  clean        - Remove generated files"
+	@echo ""
+	@echo "Test & Data:"
+	@echo "  test         - Run basic end-to-end test"
+	@echo "  seed         - Generate random orders for observability demo"
+	@echo ""
+	@echo "Monitoring & Observability:"
+	@echo "  logs         - Follow service logs"
+	@echo "  status       - Show running containers"
+	@echo "  jaeger       - Open Jaeger UI (Tracing)"
+	@echo "  prometheus   - Open Prometheus UI (Metrics)"
+	@echo "  grafana      - Open Grafana UI (Dashboards & Loki Logs)"
+	@echo "  loki         - Alias for Grafana (viewing logs)"
+	@echo "  kafka-ui     - Open Kafka UI (Topics & Messages)"
+
+.DEFAULT_GOAL := help

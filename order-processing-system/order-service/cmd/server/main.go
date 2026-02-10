@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -18,7 +19,40 @@ import (
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/models"
 	pb "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1"
 	"gorm.io/gorm"
+
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
+
+func initTracer() (*sdktrace.TracerProvider, error) {
+	ctx := context.Background()
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if otelEndpoint == "" {
+		otelEndpoint = "localhost:4317"
+	}
+
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithEndpoint(otelEndpoint),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tp := sdktrace.NewTracerProvider(
+		sdktrace.WithBatcher(exporter),
+		sdktrace.WithResource(resource.NewWithAttributes(
+			semconv.SchemaURL,
+			semconv.ServiceNameKey.String("order-service"),
+		)),
+	)
+	otel.SetTracerProvider(tp)
+	return tp, nil
+}
 
 type server struct {
 	pb.UnimplementedOrderServiceServer
@@ -141,6 +175,16 @@ func (s *server) ListOrders(ctx context.Context, req *pb.ListOrdersRequest) (*pb
 }
 
 func main() {
+	tp, err := initTracer()
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		if err := tp.Shutdown(context.Background()); err != nil {
+			log.Printf("Error shutting down tracer provider: %v", err)
+		}
+	}()
+
 	inventoryAddr := os.Getenv("INVENTORY_SERVICE_ADDR")
 	if inventoryAddr == "" {
 		inventoryAddr = "localhost:50052"
@@ -171,13 +215,28 @@ func main() {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+	)
 	srv := &server{
 		inventoryClient: invClient,
 		kafkaProducer:   producer,
 	}
 
 	pb.RegisterOrderServiceServer(s, srv)
+
+	// Start health check server
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("healthy"))
+		})
+		log.Printf("Health check server listening at :8081")
+		if err := http.ListenAndServe(":8081", mux); err != nil {
+			log.Printf("Health check server failed: %v", err)
+		}
+	}()
 
 	log.Printf("Order Service listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {

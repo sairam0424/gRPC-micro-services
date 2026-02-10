@@ -13,12 +13,21 @@ services:
       - INVENTORY_SERVICE_ADDR=inventory-service:50052
       - KAFKA_BROKERS=kafka:29092
       - DATABASE_URL=${ORDER_DATABASE_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     # Overriding CMD to use air for hot-reloading
     command: sh -c "go install github.com/air-verse/air@v1.61.1 && air -c .air.toml"
     networks:
       - grpc-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - inventory-service
+      inventory-service:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     develop:
       watch:
         - path: ./order-service
@@ -35,10 +44,20 @@ services:
       - ORDER_SERVICE_ADDR=order-service:50051
       - STREAM_SERVICE_ADDR=order-streamer:50053
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - order-service
-      - order-streamer
+      order-service:
+        condition: service_healthy
+      order-streamer:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - grpc-net
     develop:
@@ -55,9 +74,18 @@ services:
     environment:
       - DATABASE_URL=${ORDER_DATABASE_URL}
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8002 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - grpc-net
     develop:
@@ -78,10 +106,19 @@ services:
       - .env
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - grpc-net
     develop:
@@ -99,9 +136,18 @@ services:
       - ./order-streamer:/app
     environment:
       - KAFKA_BROKERS=kafka:29092
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     command: sh -c "go install github.com/air-verse/air@v1.61.1 && air -c .air.toml"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     depends_on:
-      - kafka
+      kafka:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
     networks:
       - grpc-net
     develop:
@@ -120,8 +166,12 @@ services:
       - /app/.next
     command: npm run dev
     depends_on:
-      - api-gateway
-      - inventory-service
+      api-gateway:
+        condition: service_healthy
+      inventory-service:
+        condition: service_healthy
+      auth-service:
+        condition: service_healthy
     networks:
       - grpc-net
     develop:
@@ -146,6 +196,66 @@ services:
       - web-client
     networks:
       - grpc-net
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686"
+    networks:
+      - grpc-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus.yaml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+    networks:
+      - grpc-net
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - grpc-net
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    networks:
+      - grpc-net
+    depends_on:
+      - prometheus
+      - loki
+      - jaeger
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317" # OTLP gRPC receiver
+      - "4318:4318" # OTLP HTTP receiver
+      - "8889:8889" # Prometheus exporter
+      - "13133:13133" # Health check
+    networks:
+      - grpc-net
+    depends_on:
+      - jaeger
+      - prometheus
+      - loki
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
@@ -178,10 +288,24 @@ services:
     networks:
       - grpc-net
     healthcheck:
-      test: ["CMD-SHELL", "/usr/bin/kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      # Use kafka-broker-api-versions to check if the broker is up on the internal port
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+      KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+    depends_on:
+      - kafka
+    networks:
+      - grpc-net
 
 
 networks:
