@@ -323,7 +323,7 @@ services:
       - "6379:6379"
       - "8003:8001" # Redis Insight
     environment:
-      - REDIS_ARGS=--requirepass bloompass
+      - REDIS_ARGS=--requirepass bloompass --maxmemory 256mb --maxmemory-policy allkeys-lru
     networks:
       - grpc-net
     healthcheck:
@@ -331,6 +331,34 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    platform: linux/arm64
+    environment:
+      - REDIS_ADDR=redis:6379
+      - REDIS_PASSWORD=bloompass
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - grpc-net
+
+  redis-commander:
+    image: ghcr.io/joeferner/redis-commander:latest
+    platform: linux/arm64
+    environment:
+      - REDIS_HOSTS=local:redis:6379:0:bloompass
+    ports:
+      - "8082:8081" # Map to 8082 as 8081 is used by order-service health in some configs? Wait, order-service health is usually different. 
+      # Let's use 8084 for Redis Commander to be safe.
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - grpc-net
 
 
 networks:
