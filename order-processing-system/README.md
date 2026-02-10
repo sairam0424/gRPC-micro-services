@@ -3,14 +3,16 @@
 A production-style, event-driven order platform built with gRPC, FastAPI, Go, Kafka, and a Next.js dashboard. It demonstrates REST-to-gRPC bridging, inventory reservation with ACID guarantees, and real-time order status updates via Kafka + gRPC streaming + SSE.
 
 ## Highlights
-- **API Gateway (FastAPI)** exposes REST endpoints and bridges to gRPC services.
+- **API Gateway (FastAPI)** exposes REST endpoints and bridges to gRPC services, now with a **Tier-1 Bloom Filter** for catalog existence pre-filtering.
 - **Order Service (Go)** persists orders and publishes events to Kafka.
-- **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL (Neon-ready).
+- **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL, now with a **Tier-2 Cuckoo Filter** for fast in-stock checks and a **high-performance Redis Cache (Cache-Aside)** with request coalescing and jitter.
+- **Redis Stack** provides the backbone for the Bloom filters, Cuckoo filters, and the caching layer.
 - **Order Streamer (Go)** consumes Kafka events and exposes a gRPC server-streaming API.
 - **Web Client (Next.js)** consumes REST + SSE to display live order updates.
 - **Nginx Proxy** routes `/` to the UI and `/api` to the gateway.
 - **Full Observability**: OpenTelemetry, Jaeger, Prometheus, Loki, and Grafana.
-- **Admin Visibility**: Kafka UI for message and topic monitoring.
+- **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
+- **Admin Visibility**: Kafka UI, **RedisInsight**, and **Redis Commander**.
 
 ## Architecture (At a Glance)
 
@@ -21,6 +23,8 @@ graph TD
     Proxy --> API[FastAPI API Gateway]
     API -->|gRPC| Order[Order Service]
     API -->|gRPC| Inventory[Inventory Service]
+    API -->|Check BF| Redis[(Redis Stack)]
+    Inventory -->|Check CF & Cache| Redis
     Order -->|Kafka| Kafka[(Kafka)]
     Inventory -->|Kafka| Kafka
     Kafka --> Streamer[Order Streamer]
@@ -32,7 +36,7 @@ graph TD
 ## Event Flow
 1. **Create order** via REST (`POST /api/orders`).
 2. **Order Service** stores the order and emits `order.created` to Kafka.
-3. **Inventory Service** consumes the event, reserves stock atomically, then publishes `inventory.reserved` or `inventory.failed`.
+3. **Inventory Service** consumes the event, checks the Bloom filter and Redis cache, then reserves stock atomically in DB if needed. It then updates the cache and publishes `inventory.reserved` or `inventory.failed`.
 4. **Order Service** consumes inventory results, updates order status, and emits `order.updated`.
 5. **Order Streamer** publishes updates to gRPC stream.
 6. **API Gateway** bridges gRPC stream to **SSE** at `/api/orders/events` for the web client.
@@ -49,12 +53,19 @@ graph TD
 ## REST API (via API Gateway)
 Base URL: `http://localhost/api`
 
-- `GET /` -> gateway health response
+- `GET /health` -> advanced gateway health (checks all dependencies)
 - `POST /orders` -> create order
 - `GET /orders` -> list orders (`customer_id` optional)
 - `GET /orders/{order_id}` -> fetch order
 - `GET /orders/events` -> SSE stream of live updates
 - `GET /inventory` -> gateway inventory check (placeholder)
+
+### Health Check Endpoints (Direct)
+- `GET /api/auth/health` -> Auth Service (DB check)
+- `GET /api/inventory/health` -> Inventory Service (DB & Redis check)
+- `GET /api/orders/health` -> Order Service (DB check)
+- `GET /api/streamer/health` -> Order Streamer (Kafka check)
+- `GET /api/health` -> API Gateway (Dependency health summary)
 
 Example (create order):
 ```bash
@@ -72,6 +83,27 @@ The system is equipped with a full observability stack:
 - **Kafka UI**: Topic/Message monitoring (`make kafka-ui`)
 
 For setup details, see [Observability Documentation](docs/observability.md).
+
+## Advanced Caching & Invalidation
+The system utilizes a high-performance caching layer in the `inventory-service` to minimize database latency and prevent meltdowns during traffic spikes.
+
+- **Cache-Aside Strategy**: Stock levels are served from Redis, falling back to PostgreSQL only on misses.
+- **Event-Driven Invalidation**: The "Golden Rule" is followed—cache is refreshed via `inventory.updated` Kafka events, ensuring all service instances stay synchronized.
+- **Resilience Patterns**:
+    - **Single-flight**: Coalesces concurrent requests for the same item into one DB hit.
+    - **TTL Jitter**: Staggers cache expirations (0-5 min jitter) to prevent thundering herds.
+- **Asynchronous Warming**: Background tasks populate the cache on startup without blocking the service.
+
+## Management & Monitoring Tools
+
+| Tool | Access URL | Description |
+| :--- | :--- | :--- |
+| **Grafana** | `http://localhost:3000` | Unified dashboards for metrics, logs, and cache performance. |
+| **Jaeger** | `http://localhost:16686` | Distributed tracing for gRPC and HTTP requests. |
+| **RedisInsight** | `http://localhost:8003` | Native Redis UI for memory analysis and profiling. |
+| **Redis Commander** | `http://localhost:8081` | Web-based Redis key management. |
+| **Kafka UI** | `http://localhost:8080` | Monitor topics and `inventory.updated` events. |
+| **Prometheus** | `http://localhost:9090` | Raw metrics and service target status. |
 
 ## Full Tech Flow (How to Run)
 
@@ -195,9 +227,7 @@ order-processing-system/
 - `docs/postgresql_config.md`
 - `docs/neon_setup.md`
 
-## Notes and Gaps
-- Authentication/authorization is not implemented yet.
-- Inventory listing in the gateway is currently a placeholder.
+
 
 ## Makefile Targets
 

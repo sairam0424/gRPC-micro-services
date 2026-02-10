@@ -18,6 +18,15 @@ service InventoryService {
 
   // UpdateStock is used for manual inventory management (adding stock).
   rpc UpdateStock(UpdateStockRequest) returns (UpdateStockResponse);
+
+  // ListInventory returns all items in the inventory.
+  rpc ListInventory(ListInventoryRequest) returns (ListInventoryResponse);
+}
+
+message ListInventoryRequest {}
+
+message ListInventoryResponse {
+  repeated InventoryItem items = 1;
 }
 
 message CheckStockRequest {

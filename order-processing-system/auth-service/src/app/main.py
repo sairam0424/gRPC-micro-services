@@ -18,12 +18,16 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlmodel import Session, select
+from sqlmodel import Session, select, text
 from typing import List
 from pydantic import BaseModel
 
 from .models import User, engine, init_db, get_session
 from .security import get_password_hash, verify_password, create_access_token
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,41 +45,35 @@ async def lifespan(app: FastAPI):
     meter_provider = MeterProvider(resource=resource, metric_readers=[metric_reader])
     metrics.set_meter_provider(meter_provider)
 
-    # Logs
+    # Logging
     logger_provider = LoggerProvider(resource=resource)
     _logs.set_logger_provider(logger_provider)
     logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter(endpoint=OTEL_EXPORTER_OTLP_ENDPOINT, insecure=True)))
-
-    # Logging Instrumentation
-    LoggingInstrumentor().instrument(set_logging_format=True)
-    handler = LoggingHandler(level=logging.INFO, logger_provider=logger_provider)
-    logging.getLogger().addHandler(handler)
-
-    FastAPIInstrumentor.instrument_app(app)
-
-    # Startup
-    init_db() # Assuming create_db_and_tables() was a typo and init_db() is intended
+    
+    # Initialize DB
+    init_db()
+    
     yield
-    # Shutdown
-    FastAPIInstrumentor.uninstrument_app(app)
+    
+    # Cleanup
     tracer_provider.shutdown()
     meter_provider.shutdown()
     logger_provider.shutdown()
 
-app = FastAPI(title="Auth Service", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Auth Service API", version="0.1.0", lifespan=lifespan)
 
-@app.on_event("startup")
-def on_startup():
-    # init_db() # Moved to lifespan
-    pass
+# Instrument FastAPI
+FastAPIInstrumentor.instrument_app(app)
+LoggingInstrumentor().instrument(set_logging_format=True)
 
+# Pydantic models for request/response
 class UserCreate(BaseModel):
     username: str
     email: str
     password: str
-    full_name: str | None = None
 
 class UserResponse(BaseModel):
+    id: int
     username: str
     email: str
     full_name: str | None = None
@@ -89,8 +87,17 @@ class Token(BaseModel):
     token_type: str
 
 @app.get("/health")
-def health():
-    return {"status": "ok"}
+async def health(session: Session = Depends(get_session)):
+    try:
+        # Simple query to check DB health
+        session.exec(text("SELECT 1")).first()
+        return {"status": "ok", "checks": {"database": "connected"}}
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Database connection failed: {str(e)}"
+        )
 
 @app.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def signup(user_data: UserCreate, session: Session = Depends(get_session)):
@@ -100,23 +107,24 @@ def signup(user_data: UserCreate, session: Session = Depends(get_session)):
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username or email already registered"
+            detail="Username or email already registered",
         )
     
-    # Create user
-    db_user = User(
+    # Create new user
+    hashed_password = get_password_hash(user_data.password)
+    user = User(
         username=user_data.username,
         email=user_data.email,
-        full_name=user_data.full_name,
-        hashed_password=get_password_hash(user_data.password)
+        hashed_password=hashed_password,
+        is_active=True
     )
-    session.add(db_user)
+    session.add(user)
     session.commit()
-    session.refresh(db_user)
-    return db_user
+    session.refresh(user)
+    return user
 
 @app.post("/token", response_model=Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
+def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)):
     statement = select(User).where(User.username == form_data.username)
     user = session.exec(statement).first()
     

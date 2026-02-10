@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/sairam0424/gRPC-micro-services/order-streamer/internal/kafka"
 	pb "github.com/sairam0424/gRPC-micro-services/order-streamer/pkg/generated/stream/v1"
@@ -173,6 +175,13 @@ func main() {
 	// Start health check server
 	go func() {
 		http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			if err := consumer.Ping(ctx); err != nil {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				fmt.Fprintf(w, "kafka connectivity error: %v", err)
+				return
+			}
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("healthy"))
 		})

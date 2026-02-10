@@ -105,6 +105,12 @@ loki:
 kafka-ui:
 	open http://localhost:8080
 
+redis-insight:
+	open http://localhost:8003
+
+redis-commander:
+	open http://localhost:8082
+
 help:
 	@echo "Usage: make [target]"
 	@echo ""
@@ -128,5 +134,7 @@ help:
 	@echo "  grafana      - Open Grafana UI (Dashboards & Loki Logs)"
 	@echo "  loki         - Alias for Grafana (viewing logs)"
 	@echo "  kafka-ui     - Open Kafka UI (Topics & Messages)"
+	@echo "  redis-insight - Open RedisInsight Dashboard"
+	@echo "  redis-commander - Open Redis Commander UI"
 
 .DEFAULT_GOAL := help

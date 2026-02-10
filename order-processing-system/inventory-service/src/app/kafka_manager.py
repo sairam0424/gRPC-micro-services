@@ -4,6 +4,8 @@ import asyncio
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from . import crud
 from .database import async_session
+from .bloom_filter import filter_manager
+from .cache import cache_manager
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +52,8 @@ class KafkaManager:
                 
                 if event.get("event_type") == "order.created":
                     await self.handle_order_created(event)
+                elif event.get("event_type") == "inventory.updated":
+                    await self.handle_inventory_updated(event)
         except Exception as e:
             logger.error(f"Error in Kafka consume loop: {e}")
 
@@ -65,6 +69,36 @@ class KafkaManager:
                 self.quantity = quantity
 
         req_items = [ItemReq(i["product_id"], i["quantity"]) for i in items]
+        
+        # Tier-2 Bloom Filter Check: Is the product likely in stock?
+        for item in req_items:
+            if not filter_manager.is_in_stock(item.product_id):
+                logger.info(f"Bloom Filter Reject (Tier-2): Product {item.product_id} likely out of stock for order {order_id}")
+                response_event = {
+                    "event_type": "inventory.failed",
+                    "order_id": order_id,
+                    "customer_id": customer_id,
+                    "status": "FAILED",
+                    "message": f"Product {item.product_id} is likely out of stock (Tier-2 check)",
+                    "items": items
+                }
+                await self.producer.send_and_wait(self.topic_out, response_event)
+                return
+
+            # 2. Fast Cache Check
+            cached_qty = cache_manager.get_stock(item.product_id)
+            if cached_qty is not None and cached_qty < item.quantity:
+                logger.info(f"Cache Reject: Product {item.product_id} has insufficient stock for order {order_id} ({cached_qty} < {item.quantity})")
+                response_event = {
+                    "event_type": "inventory.failed",
+                    "order_id": order_id,
+                    "customer_id": customer_id,
+                    "status": "FAILED",
+                    "message": f"Insufficient stock for {item.product_id} (cached check)",
+                    "items": items
+                }
+                await self.producer.send_and_wait(self.topic_out, response_event)
+                return
 
         async with async_session() as session:
             try:
@@ -85,3 +119,27 @@ class KafkaManager:
             except Exception as e:
                 logger.error(f"Error handling order.created: {e}")
                 # Optional: publish a generic failure event
+
+    async def handle_inventory_updated(self, event):
+        """
+        Golden Rule: Refresh cache via events.
+        Ensures consistency across all instances.
+        """
+        product_id = event.get("product_id")
+        quantity = event.get("quantity")
+        if product_id is not None and quantity is not None:
+            logger.info(f"Event-driven Cache Refresh: {product_id} = {quantity}")
+            # This is the event-driven warming/invalidation
+            cache_manager.set_stock(product_id, quantity)
+            # Also update Tier-2 Bloom Filter
+            filter_manager.update_stock_status(product_id, quantity > 0)
+
+    async def publish_inventory_update(self, product_id: str, quantity: int):
+        """Helper to broadcast inventory changes"""
+        event = {
+            "event_type": "inventory.updated",
+            "product_id": product_id,
+            "quantity": quantity
+        }
+        await self.producer.send_and_wait(self.topic_out, event)
+        logger.info(f"Published inventory update: {product_id} = {quantity}")
