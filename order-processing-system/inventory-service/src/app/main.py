@@ -173,7 +173,15 @@ app = FastAPI(title="Inventory Service API", version="0.1.0", lifespan=lifespan)
 
 @app.get("/health")
 async def health():
-    health_status = {"status": "ok", "checks": {}}
+    health_status = {
+        "status": "healthy",
+        "version": "0.1.0",
+        "checks": {
+            "database": "unknown",
+            "redis": "unknown",
+            "kafka": "unknown"
+        }
+    }
     overall_status = True
 
     # Check Database
@@ -195,8 +203,15 @@ async def health():
         health_status["checks"]["redis"] = f"failed: {str(e)}"
         overall_status = False
 
+    # Check Kafka
+    if hasattr(app.state, "kafka") and app.state.kafka.is_healthy():
+        health_status["checks"]["kafka"] = "connected"
+    else:
+        health_status["checks"]["kafka"] = "disconnected"
+        overall_status = False
+
     if not overall_status:
-        health_status["status"] = "error"
+        health_status["status"] = "unhealthy"
         raise HTTPException(status_code=503, detail=health_status)
     
     return health_status

@@ -3,7 +3,10 @@
 A production-style, event-driven order platform built with gRPC, FastAPI, Go, Kafka, and a Next.js dashboard. It demonstrates REST-to-gRPC bridging, inventory reservation with ACID guarantees, and real-time order status updates via Kafka + gRPC streaming + SSE.
 
 ## Highlights
-- **API Gateway (FastAPI)** exposes REST endpoints and bridges to gRPC services, now with a **Tier-1 Bloom Filter** for catalog existence pre-filtering.
+- **API Gateway (FastAPI)**: REST interface, JWT Authentication, Rate Limiting, and Load Shedding.
+- **Rate Limiting**: Distributed Token Bucket using Redis.
+- **Load Shedding**: Graceful degradation under stress.
+- **Tier-1 Bloom Filter** for catalog existence pre-filtering.
 - **Order Service (Go)** persists orders and publishes events to Kafka.
 - **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL, now with a **Tier-2 Cuckoo Filter** for fast in-stock checks and a **high-performance Redis Cache (Cache-Aside)** with request coalescing and jitter.
 - **Redis Stack** provides the backbone for the Bloom filters, Cuckoo filters, and the caching layer.
