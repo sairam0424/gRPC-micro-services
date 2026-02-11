@@ -44,6 +44,7 @@ This system is composed of multiple microservices communicating via gRPC, adheri
 flowchart TD
     subgraph "Clients"
         Client[Web Browser]
+        Dashboard[Cluster Dashboard]
     end
 
     subgraph "API Gateway Layer"
@@ -51,14 +52,16 @@ flowchart TD
         Gateway[API Gateway]
     end
 
-    subgraph "Inventory Service (Read/Write Routing)"
+    subgraph "Inventory Service (Raft Cluster)"
         Inventory[Inventory Service]
-        ReadRouter{Read Router}
+        ETCD[(etcd - Raft Consensus)]
+        MetricsRouter{Metric-Based Router}
     end
 
-    subgraph "Database Tier (Leader-Replica)"
+    subgraph "Database Tier (Multi-Replica)"
         LeaderDB[(Postgres Leader\nWrites + Strong Reads)]
-        ReplicaDB[(Postgres Replica\nEventual Reads)]
+        Replica1[(Postgres Replica 1\nEventual Reads)]
+        Replica2[(Postgres Replica 2\nEventual Reads)]
     end
 
     subgraph "CDC Pipeline"
@@ -74,21 +77,36 @@ flowchart TD
     Client -->|REST| Proxy
     Proxy --> Gateway
     Gateway -->|gRPC| Inventory
+    Dashboard -->|Metrics| Gateway
     
     Inventory -->|Write| LeaderDB
     Inventory -->|Strong Read| LeaderDB
-    Inventory --> ReadRouter
-    ReadRouter -->|Eventual Read| ReplicaDB
+    Inventory --> MetricsRouter
+    MetricsRouter -->|Lowest CPU| Replica1
+    MetricsRouter -->|Lowest CPU| Replica2
+
+    %% Raft & Consensus
+    Inventory <-->|Leader Election| ETCD
+    Inventory -->|Heartbeat/Metrics| ETCD
 
     %% Replication & CDC
-    LeaderDB -->|Streaming Rep| ReplicaDB
+    LeaderDB -->|Streaming Rep| Replica1
     LeaderDB -->|WAL| Debezium
     Debezium -->|Events| Kafka
-    Kafka -->|Update| Inventory
+    Kafka -->|Async Rep| Inventory
+    Inventory -->|Apply Changes| Replica2
     
     %% Caching
     Inventory -->|Cache-Aside| Redis
 ```
+
+## Resilience & High Availability
+The system now implements **Industry Standard High Availability**:
+1.  **Raft Consensus**: Uses `etcd` for distributed leader election and cluster state management.
+2.  **Multi-Replica Routing**: Metric-based routing (CPU, connections, health) ensures traffic is directed to the most optimal node.
+3.  **Hybrid Replication**:
+    *   **Native Streaming**: Replica 1 uses standard Postgres streaming replication.
+    *   **Async CDC**: Replica 2 uses Kafka-based CDC (Debezium) for eventually consistent updates.
 
 ## Resilience Patterns
 
