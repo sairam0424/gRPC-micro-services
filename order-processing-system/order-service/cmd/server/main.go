@@ -229,19 +229,30 @@ func main() {
 	go func() {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			
+			dbStatus := "connected"
 			db, err := database.DB.DB()
-			if err != nil {
-				w.WriteHeader(http.StatusServiceUnavailable)
-				fmt.Fprintf(w, "database error: %v", err)
-				return
+			if err != nil || db.Ping() != nil {
+				dbStatus = "disconnected"
 			}
-			if err := db.Ping(); err != nil {
-				w.WriteHeader(http.StatusServiceUnavailable)
-				fmt.Fprintf(w, "database ping failed: %v", err)
-				return
+			
+			// For this demo, we assume kafka is connected if the producer is initialized
+			// In Go, better check would be writer.Stats() or Dial
+			kafkaStatus := "connected"
+			if producer == nil {
+				kafkaStatus = "disconnected"
 			}
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("healthy"))
+
+			status := "healthy"
+			if dbStatus != "connected" || kafkaStatus != "connected" {
+				status = "unhealthy"
+				w.WriteHeader(http.StatusServiceUnavailable)
+			} else {
+				w.WriteHeader(http.StatusOK)
+			}
+
+			fmt.Fprintf(w, `{"status": "%s", "version": "0.1.0", "checks": {"database": "%s", "kafka": "%s"}}`, status, dbStatus, kafkaStatus)
 		})
 		log.Printf("Health check server listening at :8081")
 		if err := http.ListenAndServe(":8081", mux); err != nil {

@@ -88,15 +88,25 @@ class Token(BaseModel):
 
 @app.get("/health")
 async def health(session: Session = Depends(get_session)):
+    health_status = {
+        "status": "healthy",
+        "version": "0.1.0",
+        "checks": {
+            "database": "unknown"
+        }
+    }
     try:
-        # Simple query to check DB health
+        # Check DB connectivity
         session.exec(text("SELECT 1")).first()
-        return {"status": "ok", "checks": {"database": "connected"}}
+        health_status["checks"]["database"] = "connected"
+        return health_status
     except Exception as e:
         logger.error(f"Health check failed: {e}")
+        health_status["status"] = "unhealthy"
+        health_status["checks"]["database"] = f"failed: {str(e)}"
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Database connection failed: {str(e)}"
+            detail=health_status
         )
 
 @app.post("/signup", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
