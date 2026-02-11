@@ -28,10 +28,11 @@ GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
 sys.path.append(GENERATED_DIR)
 
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
-from .database import init_db, get_db, writer_session, reader_session
+from .database import init_db, get_db, writer_session
 from .models import InventoryItem
 from .bloom_filter import filter_manager
 from .cache import cache_manager
+from .consensus import consensus_manager
 
 from contextlib import asynccontextmanager
 
@@ -145,6 +146,10 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(periodic_sync())
     
     kafka_brokers = os.getenv("KAFKA_BROKERS", "kafka:29092")
+    
+    # Raft Consensus Registration
+    await consensus_manager.register_node()
+    
     app.state.kafka = KafkaManager(kafka_brokers, "order-events", "order-events")
     await app.state.kafka.start()
     
@@ -215,6 +220,16 @@ async def health():
         raise HTTPException(status_code=503, detail=health_status)
     
     return health_status
+
+@app.get("/cluster/status")
+async def cluster_status():
+    """Endpoint to view Raft Cluster Status and Metrics"""
+    return {
+        "leader": consensus_manager.get_leader(),
+        "is_this_node_leader": consensus_manager.is_leader,
+        "nodes": consensus_manager.get_all_nodes(),
+        "current_node_id": consensus_manager.node_id
+    }
 
 @app.get("/inventory")
 async def list_inventory(db: AsyncSession = Depends(get_db)):
@@ -317,7 +332,7 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
 
     async def ListInventory(self, request, context):
         # Route eventual consistency list to REPLICA
-        async with reader_session() as session:
+        async with get_db() as session:
             try:
                 items = await crud.get_all_inventory(session)
                 return inventory_pb2.ListInventoryResponse(

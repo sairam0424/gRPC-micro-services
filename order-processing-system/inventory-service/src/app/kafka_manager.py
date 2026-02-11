@@ -3,7 +3,7 @@ import logging
 import asyncio
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from . import crud
-from .database import writer_session
+from .database import writer_session, reader_sessions
 from .bloom_filter import filter_manager
 from .cache import cache_manager
 
@@ -128,15 +128,28 @@ class KafkaManager:
         """
         Golden Rule: Refresh cache via events.
         Ensures consistency across all instances.
+        
+        NEW: Also implement async replication for Multi-Replica Setup.
+        We apply the change to Replica 2 asynchronously via Kafka CDC.
         """
         product_id = event.get("product_id")
         quantity = event.get("quantity")
         if product_id is not None and quantity is not None:
-            logger.info(f"Event-driven Cache Refresh: {product_id} = {quantity}")
-            # This is the event-driven warming/invalidation
+            logger.info(f"Event-driven Cache Refresh & Async Rep: {product_id} = {quantity}")
+            # 1. Update Cache
             cache_manager.set_stock(product_id, quantity)
-            # Also update Tier-2 Bloom Filter
+            # 2. Update Tier-2 Bloom Filter
             filter_manager.update_stock_status(product_id, quantity > 0)
+            
+            # 3. Async Replication to Replica 2
+            async with reader_sessions["replica2"]() as session:
+                try:
+                    await crud.update_stock_level(session, product_id, 0, override_quantity=quantity)
+                    await session.commit()
+                    logger.info(f"Async Replication to Replica 2 complete for {product_id}")
+                except Exception as e:
+                    logger.error(f"Async Replication failed for {product_id}: {e}")
+                    await session.rollback()
 
     async def publish_inventory_update(self, product_id: str, quantity: int):
         """Helper to broadcast inventory changes"""

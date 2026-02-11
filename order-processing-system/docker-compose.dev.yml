@@ -115,6 +115,9 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REPLICA_DATABASE_URL=${REPLICA_DATABASE_URL}
+      - REPLICA2_DATABASE_URL=${REPLICA2_DATABASE_URL}
+      - ETCD_HOST=${ETCD_HOST}
+      - ETCD_PORT=${ETCD_PORT}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - REDIS_PASSWORD=${REDIS_PASSWORD}
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
@@ -392,6 +395,17 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    networks:
+      - grpc-net
+
+  etcd:
+    image: bitnami/etcd:latest
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    environment:
+      - ALLOW_NONE_AUTHENTICATION=yes
+      - ETCD_ADVERTISED_LISTEN_ADDRESS=etcd:2379
     networks:
       - grpc-net
 
