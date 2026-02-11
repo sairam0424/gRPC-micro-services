@@ -1,40 +1,56 @@
 import os
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-# asyncpg doesn't support the 'sslmode' query parameter. 
-# If it's present (e.g. from a legacy .env or Neon default), we strip it.
-if DATABASE_URL and "sslmode=" in DATABASE_URL:
-    from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
-    u = urlparse(DATABASE_URL)
-    q = parse_qs(u.query)
-    q.pop("sslmode", None)
-    DATABASE_URL = urlunparse(u._replace(query=urlencode(q, doseq=True)))
-
-# Neon requires SSL. asyncpg uses sslmode in the URL, but for SQLAlchemy with asyncpg, 
-# we need to ensure the URL is properly formatted.
-# SQLAlchemy asyncpg usually handles this via connect_args or query params.
-
 from sqlalchemy.pool import NullPool
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
-engine = create_async_engine(
+def clean_url(url: str):
+    if not url:
+        return url
+    if "sslmode=" in url:
+        u = urlparse(url)
+        q = parse_qs(u.query)
+        q.pop("sslmode", None)
+        return urlunparse(u._replace(query=urlencode(q, doseq=True)))
+    return url
+
+# Leader/Writer
+DATABASE_URL = clean_url(os.getenv("DATABASE_URL"))
+# Replica/Reader
+REPLICA_DATABASE_URL = clean_url(os.getenv("REPLICA_DATABASE_URL", DATABASE_URL))
+
+# Writer Engine
+writer_engine = create_async_engine(
     DATABASE_URL, 
     echo=True,
     poolclass=NullPool,
-    # Neon requires SSL. We explicitly set it for neon.tech hosts.
     connect_args={"ssl": "require"} if "neon.tech" in DATABASE_URL else {},
 )
-async_session = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
+writer_session = async_sessionmaker(writer_engine, expire_on_commit=False, class_=AsyncSession)
+
+# Reader Engine
+reader_engine = create_async_engine(
+    REPLICA_DATABASE_URL,
+    echo=True,
+    poolclass=NullPool,
+    connect_args={"ssl": "require"} if "neon.tech" in REPLICA_DATABASE_URL else {},
+)
+reader_session = async_sessionmaker(reader_engine, expire_on_commit=False, class_=AsyncSession)
+
 Base = declarative_base()
 
-async def get_db():
-    async with async_session() as session:
+async def get_writer_db():
+    async with writer_session() as session:
         yield session
 
+async def get_reader_db():
+    async with reader_session() as session:
+        yield session
+
+# Alias for backwards compatibility or default behavior
+get_db = get_reader_db
+
 async def init_db():
-    async with engine.begin() as conn:
-        # Import models here to ensure they are registered
+    async with writer_engine.begin() as conn:
         from . import models
         await conn.run_sync(Base.metadata.create_all)

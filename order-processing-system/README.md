@@ -14,23 +14,56 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
 - **Admin Visibility**: Kafka UI, **RedisInsight**, and **Redis Commander**.
 
-## Architecture (At a Glance)
+## Architecture (Leader-Replica + CDC)
 
 ```mermaid
-graph TD
-    Client[Web Browser] --> Proxy[Nginx :80]
-    Proxy --> Web[Next.js Web Client]
-    Proxy --> API[FastAPI API Gateway]
-    API -->|gRPC| Order[Order Service]
-    API -->|gRPC| Inventory[Inventory Service]
-    API -->|Check BF| Redis[(Redis Stack)]
-    Inventory -->|Check CF & Cache| Redis
-    Order -->|Kafka| Kafka[(Kafka)]
-    Inventory -->|Kafka| Kafka
-    Kafka --> Streamer[Order Streamer]
-    Streamer -->|gRPC stream| API
-    API -->|SSE| Client
-    Inventory --> DB[(PostgreSQL)]
+flowchart TD
+    subgraph "Clients"
+        Client[Web Browser]
+    end
+
+    subgraph "API Gateway Layer"
+        Proxy[Nginx Proxy]
+        Gateway[API Gateway]
+    end
+
+    subgraph "Inventory Service (Read/Write Routing)"
+        Inventory[Inventory Service]
+        ReadRouter{Read Router}
+    end
+
+    subgraph "Database Tier (Leader-Replica)"
+        LeaderDB[(Postgres Leader\nWrites + Strong Reads)]
+        ReplicaDB[(Postgres Replica\nEventual Reads)]
+    end
+
+    subgraph "CDC Pipeline"
+        Debezium[Debezium Connector]
+        Kafka[(Kafka)]
+    end
+
+    subgraph "Caching Tier"
+        Redis[(Redis Stack)]
+    end
+
+    %% Flow
+    Client -->|REST| Proxy
+    Proxy --> Gateway
+    Gateway -->|gRPC| Inventory
+    
+    Inventory -->|Write| LeaderDB
+    Inventory -->|Strong Read| LeaderDB
+    Inventory --> ReadRouter
+    ReadRouter -->|Eventual Read| ReplicaDB
+
+    %% Replication & CDC
+    LeaderDB -->|Streaming Rep| ReplicaDB
+    LeaderDB -->|WAL| Debezium
+    Debezium -->|Events| Kafka
+    Kafka -->|Update| Inventory
+    
+    %% Caching
+    Inventory -->|Cache-Aside| Redis
 ```
 
 ## Event Flow
@@ -40,6 +73,39 @@ graph TD
 4. **Order Service** consumes inventory results, updates order status, and emits `order.updated`.
 5. **Order Streamer** publishes updates to gRPC stream.
 6. **API Gateway** bridges gRPC stream to **SSE** at `/api/orders/events` for the web client.
+
+## Database Orchestration & CDC
+The system features a sophisticated database architecture designed for scaling and real-time data consistency.
+
+- **Leader-Replica Orchestration**: The `inventory-service` dynamically routes writes and strong-consistency reads to the PostgreSQL Leader, while eventual-consistency reads (like catalog listings) are routed to a Read Replica.
+- **Change Data Capture (CDC)**: Powered by **Debezium**, the system captures row-level changes from the PostgreSQL Write-Ahead Log (WAL) and streams them into Kafka topics (`inventory_cdc.public.inventory`).
+- **Read/Write Splitting**: Managed via dual SQLAlchemy engines (`writer_engine` and `reader_engine`) in the `inventory-service`.
+
+## Setup Guide: Enabling CDC (Neon Postgres)
+
+To get the full Leader-Replica + CDC flow running with Neon:
+
+1. **Enable Logical Replication**:
+   - Go to your **Neon Console**.
+   - Navigate to **Settings** -> **Database Configuration**.
+   - Set `wal_level` to `logical`. (Note: This is required for Debezium to read the WAL).
+2. **Configure Environment**:
+   Ensure your `.env` file has both the leader and replica strings:
+   ```env
+   DATABASE_URL=postgresql+asyncpg://... (Leader)
+   REPLICA_DATABASE_URL=postgresql+asyncpg://... (Replica)
+   ```
+3. **Start the Infrastructure**:
+   ```bash
+   make up-dev
+   ```
+4. **Register the CDC Connector**:
+   Run the following command to POST the connector configuration to the Debezium service:
+   ```bash
+   make cdc-setup
+   ```
+5. **Verify**:
+   Open the **Kafka UI** (`http://localhost:8080`) to see the CDC events flowing into the `inventory_cdc` topics.
 
 ## Services and Ports
 - **proxy (nginx)**: `http://localhost` (routes `/` and `/api`)
