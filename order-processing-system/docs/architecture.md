@@ -89,3 +89,12 @@ flowchart TD
     %% Caching
     Inventory -->|Cache-Aside| Redis
 ```
+
+## Resilience Patterns
+
+The **API Gateway** implements multiple resilience layers:
+1.  **Rate Limiting**: Token Bucket algorithm with Redis for centralized limiting.
+2.  **Load Shedding**: Automatic rejection of non-critical requests under high system stress.
+3.  **Tier-1 Bloom Filter**: Prevents invalid catalog requests from hitting downstream services.
+
+For more details, see [resilience.md](resilience.md).

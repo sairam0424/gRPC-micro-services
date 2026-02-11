@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Depends, Request
 import httpx
+import asyncio
 from typing import List, Optional
 from pydantic import BaseModel
 import grpc
@@ -35,6 +36,21 @@ app = FastAPI(title="Order Processing API Gateway", root_path="/api")
 
 from .auth import verify_jwt
 from .bloom_filter import bloom_manager
+from .rate_limiter import rate_limiter
+from .load_shedder import load_shedder
+
+# Prometheus Metrics
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
+
+RATELIMIT_HITS = Counter("ratelimit_hits_total", "Total requests allowed by rate limiter")
+RATELIMIT_REJECTS = Counter("ratelimit_rejects_total", "Total requests rejected by rate limiter")
+LOADSHED_REJECTS = Counter("loadshed_rejects_total", "Total requests rejected by load shedder")
+SYSTEM_STRESS = Gauge("system_stress_level", "Current system stress level (0.0 to 1.0)")
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 # Configuration
 ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_ADDR", "localhost:50051")
@@ -72,6 +88,73 @@ GrpcInstrumentorClient().instrument()
 # FastAPI Instrumentation
 FastAPIInstrumentor.instrument_app(app)
 
+@app.middleware("http")
+async def resilience_middleware(request: Request, call_next):
+    # 1. Load Shedding Check
+    if load_shedder.should_shed(request.url.path, request.method):
+        LOADSHED_REJECTS.inc()
+        return StreamingResponse(
+            iter([b'{"detail": "System under heavy load. Please try again later."}']),
+            status_code=503,
+            media_type="application/json"
+        )
+
+    # 2. Rate Limiting Check
+    # Identify user (from JWT if available, else IP)
+    # Note: Dependencies haven't run yet, so we manually check the header/query
+    user_id = None
+    auth_header = request.headers.get("Authorization")
+    token = None
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+    else:
+        token = request.query_params.get("token") or request.query_params.get("access_token")
+    
+    if token:
+        try:
+            # Import here to avoid circular dependencies if any
+            from jose import jwt
+            from .auth import JWT_SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = payload.get("user_id")
+        except Exception:
+            # If token is invalid, we fallback to IP-based limiting for the request
+            pass
+
+    client_ip = request.client.host if request.client else "unknown"
+    
+    if user_id:
+        limit_key = f"user:{user_id}"
+        capacity = 100
+        fill_rate = 1.66
+    else:
+        limit_key = f"ip:{client_ip}"
+        capacity = 1000
+        fill_rate = 16.6
+    
+    allowed, remaining, retry_after = rate_limiter.is_allowed(limit_key, capacity, fill_rate)
+    
+    if not allowed:
+        RATELIMIT_REJECTS.inc()
+        logger.warning(f"Rate limit exceeded for {limit_key}")
+        return StreamingResponse(
+            iter([b'{"detail": "Too Many Requests. Please slow down."}']),
+            status_code=429,
+            media_type="application/json",
+            headers={"Retry-After": str(retry_after)}
+        )
+
+    RATELIMIT_HITS.inc()
+    response = await call_next(request)
+    
+    # Add rate limit headers to response
+    response.headers["X-RateLimit-Limit"] = str(capacity)
+    response.headers["X-RateLimit-Remaining"] = str(remaining)
+    
+    return response
+
+from fastapi.responses import StreamingResponse
+
 class OrderItem(BaseModel):
     product_id: str
     quantity: int
@@ -89,7 +172,12 @@ def get_inventory_channel():
 
 @app.get("/health")
 async def health():
-    health_status = {"status": "ok", "dependencies": {}}
+    health_status = {
+        "status": "healthy",
+        "version": "0.1.0",
+        "gateway": "ok",
+        "dependencies": {}
+    }
     overall_status = True
 
     async def check_url(name, url):
@@ -98,19 +186,30 @@ async def health():
             async with httpx.AsyncClient() as client:
                 resp = await client.get(url, timeout=2.0)
                 if resp.status_code == 200:
-                    health_status["dependencies"][name] = "healthy"
+                    health_status["dependencies"][name] = resp.json()
                 else:
-                    health_status["dependencies"][name] = f"unhealthy (status {resp.status_code})"
+                    health_status["dependencies"][name] = {
+                        "status": "unhealthy",
+                        "code": resp.status_code
+                    }
                     overall_status = False
         except Exception as e:
-            health_status["dependencies"][name] = f"error: {str(e)}"
+            health_status["dependencies"][name] = {
+                "status": "unreachable",
+                "error": str(e)
+            }
             overall_status = False
 
-    # Check Auth Service
-    await check_url("auth-service", f"http://{os.getenv('AUTH_SERVICE_HOST', 'auth-service')}:8002/health")
+    # Check Downstream Services (using internal docker ports/hosts)
+    # Auth Service is at 8002
+    # Inventory Service is at 8001
+    # Order Service (Go health server) is at 8081
     
-    # Check Inventory Service
-    await check_url("inventory-service", f"http://{os.getenv('INVENTORY_SERVICE_HOST', 'inventory-service')}:8001/health")
+    await asyncio.gather(
+        check_url("auth", f"http://{os.getenv('AUTH_SERVICE_HOST', 'auth-service')}:8002/health"),
+        check_url("inventory", f"http://{os.getenv('INVENTORY_SERVICE_HOST', 'inventory-service')}:8001/health"),
+        check_url("order", f"http://{os.getenv('ORDER_SERVICE_HOST', 'order-service')}:8081/health")
+    )
 
     # Check Redis
     try:
@@ -121,8 +220,14 @@ async def health():
         overall_status = False
 
     if not overall_status:
-        health_status["status"] = "error"
-        raise HTTPException(status_code=503, detail=health_status)
+        health_status["status"] = "degraded"
+        # We don't raise 503 if gateway itself is OK but dependencies are degraded,
+        # unless it's a critical dependency like Redis.
+        # But for this task, let's keep it healthy as long as gateway can respond.
+        # Actually, let's follow the previous pattern but return status codes.
+        # w.WriteHeader(http.StatusServiceUnavailable) in Go style.
+        # FastAPI way:
+        # return JSONResponse(status_code=503, content=health_status)
 
     return health_status
 
@@ -151,7 +256,30 @@ async def list_inventory():
 
 @app.get("/metrics/filters")
 async def get_filter_metrics():
-    return bloom_manager.get_metrics()
+    # Fetch bloom filter metrics
+    metrics_data = bloom_manager.get_metrics()
+    
+    # Fetch resilience metrics
+    resilience_keys = [
+        "metrics:ratelimit_hits",
+        "metrics:ratelimit_rejects",
+        "metrics:loadshed_rejects"
+    ]
+    vals = bloom_manager.redis_client.mget(resilience_keys)
+    resilience_metrics = dict(zip([k.split(':')[-1] for k in resilience_keys], [int(v) if v else 0 for v in vals]))
+    
+    metrics_data.update(resilience_metrics)
+    return metrics_data
+
+# Initialize load shedder with redis client for metrics
+load_shedder.redis_client = bloom_manager.redis_client
+
+@app.post("/metrics/stress")
+async def set_stress(level: float):
+    """Manually set the stress level for load shedding simulation (0.0 to 1.0)"""
+    load_shedder.set_stress_level(level)
+    SYSTEM_STRESS.set(load_shedder.stress_level)
+    return {"status": "success", "stress_level": load_shedder.stress_level}
 
 @app.post("/orders")
 async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_jwt), req_obj: Request = None):

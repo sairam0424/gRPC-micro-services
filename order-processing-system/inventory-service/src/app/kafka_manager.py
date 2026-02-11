@@ -41,6 +41,10 @@ class KafkaManager:
         if self.producer:
             await self.producer.stop()
 
+    def is_healthy(self) -> bool:
+        """Check if Kafka producer and consumer are running"""
+        return self.producer is not None and self.consumer is not None
+
     async def consume_loop(self):
         try:
             async for msg in self.consumer:
