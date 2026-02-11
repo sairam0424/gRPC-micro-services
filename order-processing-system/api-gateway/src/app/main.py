@@ -39,6 +39,19 @@ from .bloom_filter import bloom_manager
 from .rate_limiter import rate_limiter
 from .load_shedder import load_shedder
 
+# Prometheus Metrics
+from prometheus_client import Counter, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from fastapi.responses import Response
+
+RATELIMIT_HITS = Counter("ratelimit_hits_total", "Total requests allowed by rate limiter")
+RATELIMIT_REJECTS = Counter("ratelimit_rejects_total", "Total requests rejected by rate limiter")
+LOADSHED_REJECTS = Counter("loadshed_rejects_total", "Total requests rejected by load shedder")
+SYSTEM_STRESS = Gauge("system_stress_level", "Current system stress level (0.0 to 1.0)")
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
 # Configuration
 ORDER_SERVICE_ADDR = os.getenv("ORDER_SERVICE_ADDR", "localhost:50051")
 INVENTORY_SERVICE_ADDR = os.getenv("INVENTORY_SERVICE_ADDR", "localhost:50052")
@@ -79,6 +92,7 @@ FastAPIInstrumentor.instrument_app(app)
 async def resilience_middleware(request: Request, call_next):
     # 1. Load Shedding Check
     if load_shedder.should_shed(request.url.path, request.method):
+        LOADSHED_REJECTS.inc()
         return StreamingResponse(
             iter([b'{"detail": "System under heavy load. Please try again later."}']),
             status_code=503,
@@ -121,6 +135,7 @@ async def resilience_middleware(request: Request, call_next):
     allowed, remaining, retry_after = rate_limiter.is_allowed(limit_key, capacity, fill_rate)
     
     if not allowed:
+        RATELIMIT_REJECTS.inc()
         logger.warning(f"Rate limit exceeded for {limit_key}")
         return StreamingResponse(
             iter([b'{"detail": "Too Many Requests. Please slow down."}']),
@@ -129,6 +144,7 @@ async def resilience_middleware(request: Request, call_next):
             headers={"Retry-After": str(retry_after)}
         )
 
+    RATELIMIT_HITS.inc()
     response = await call_next(request)
     
     # Add rate limit headers to response
@@ -257,6 +273,13 @@ async def get_filter_metrics():
 
 # Initialize load shedder with redis client for metrics
 load_shedder.redis_client = bloom_manager.redis_client
+
+@app.post("/metrics/stress")
+async def set_stress(level: float):
+    """Manually set the stress level for load shedding simulation (0.0 to 1.0)"""
+    load_shedder.set_stress_level(level)
+    SYSTEM_STRESS.set(load_shedder.stress_level)
+    return {"status": "success", "stress_level": load_shedder.stress_level}
 
 @app.post("/orders")
 async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_jwt), req_obj: Request = None):
