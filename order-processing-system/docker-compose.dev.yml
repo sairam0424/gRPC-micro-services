@@ -46,9 +46,9 @@ services:
       - ORDER_SERVICE_ADDR=order-service:50051
       - INVENTORY_SERVICE_ADDR=inventory-service:50052
       - STREAM_SERVICE_ADDR=order-streamer:50053
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
-      - REDIS_PASSWORD=bloompass
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
@@ -81,7 +81,7 @@ services:
       - ./auth-service/src:/app/src
     environment:
       - DATABASE_URL=${ORDER_DATABASE_URL}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-your-super-secret-key}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8002 --reload
     healthcheck:
@@ -114,8 +114,9 @@ services:
       - .env
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - REPLICA_DATABASE_URL=${REPLICA_DATABASE_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
-      - REDIS_PASSWORD=bloompass
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
@@ -137,6 +138,36 @@ services:
         - path: ./inventory-service/src
           target: /app/src
           action: sync
+
+  connect:
+    image: debezium/connect:2.5
+    ports:
+      - "8083:8083"
+    environment:
+      - BOOTSTRAP_SERVERS=kafka:29092
+      - GROUP_ID=1
+      - CONFIG_STORAGE_TOPIC=my_connect_configs
+      - OFFSET_STORAGE_TOPIC=my_connect_offsets
+      - STATUS_STORAGE_TOPIC=my_connect_statuses
+      - CONFIG_STORAGE_REPLICATION_FACTOR=1
+      - OFFSET_STORAGE_REPLICATION_FACTOR=1
+      - STATUS_STORAGE_REPLICATION_FACTOR=1
+      - KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - INTERNAL_KEY_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - INTERNAL_VALUE_CONVERTER=org.apache.kafka.connect.json.JsonConverter
+      - CONNECT_CONFIG_PROVIDERS=env
+      - CONNECT_CONFIG_PROVIDERS_ENV_CLASS=org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+    depends_on:
+      kafka:
+        condition: service_healthy
+    networks:
+      - grpc-net
 
   order-streamer:
     build:
@@ -325,7 +356,7 @@ services:
       - "6379:6379"
       - "8003:8001" # Redis Insight
     environment:
-      - REDIS_ARGS=--requirepass bloompass --maxmemory 256mb --maxmemory-policy allkeys-lru
+      - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
       - RI_STDOUT_LOGGER=true
       - RI_APP_HOST=0.0.0.0
     networks:
@@ -341,7 +372,7 @@ services:
     platform: linux/arm64
     environment:
       - REDIS_ADDR=redis:6379
-      - REDIS_PASSWORD=bloompass
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
     ports:
       - "9121:9121"
     depends_on:
@@ -354,7 +385,7 @@ services:
     image: ghcr.io/joeferner/redis-commander:latest
     platform: linux/arm64
     environment:
-      - REDIS_HOSTS=local:redis:6379:0:bloompass
+      - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD}
     ports:
       - "8082:8081" # Map to 8082 as 8081 is used by order-service health in some configs? Wait, order-service health is usually different. 
       # Let's use 8084 for Redis Commander to be safe.

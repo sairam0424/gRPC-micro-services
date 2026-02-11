@@ -41,23 +41,51 @@ This system is composed of multiple microservices communicating via gRPC, adheri
 ```
 
 ```mermaid
-graph TD
-    Client[Web Browser] -->|REST| Proxy[Nginx Proxy]
-    Proxy --> Gateway[API Gateway]
-    Gateway -->|gRPC| Order[Order Service]
-    Gateway -->|gRPC| Inventory[Inventory Service]
-    
-    subgraph "Event-Driven Caching"
-        Inventory -->|Events| Kafka[(Kafka)]
-        Kafka -->|Refresh| Inventory
-        Inventory -->|Cache-Aside| Redis[(Redis Stack)]
+flowchart TD
+    subgraph "Clients"
+        Client[Web Browser]
     end
-    
-    subgraph "Observability & Management"
-        Prometheus[(Prometheus)] --- Grafana[(Grafana)]
-        Redis --- RedisInsight[RedisInsight]
-        Redis --- RedisCommander[Redis Commander]
-        Redis --- RedisExporter[Redis Exporter]
-        RedisExporter --> Prometheus
+
+    subgraph "API Gateway Layer"
+        Proxy[Nginx Proxy]
+        Gateway[API Gateway]
     end
+
+    subgraph "Inventory Service (Read/Write Routing)"
+        Inventory[Inventory Service]
+        ReadRouter{Read Router}
+    end
+
+    subgraph "Database Tier (Leader-Replica)"
+        LeaderDB[(Postgres Leader\nWrites + Strong Reads)]
+        ReplicaDB[(Postgres Replica\nEventual Reads)]
+    end
+
+    subgraph "CDC Pipeline"
+        Debezium[Debezium Connector]
+        Kafka[(Kafka)]
+    end
+
+    subgraph "Caching Tier"
+        Redis[(Redis Stack)]
+    end
+
+    %% Flow
+    Client -->|REST| Proxy
+    Proxy --> Gateway
+    Gateway -->|gRPC| Inventory
+    
+    Inventory -->|Write| LeaderDB
+    Inventory -->|Strong Read| LeaderDB
+    Inventory --> ReadRouter
+    ReadRouter -->|Eventual Read| ReplicaDB
+
+    %% Replication & CDC
+    LeaderDB -->|Streaming Rep| ReplicaDB
+    LeaderDB -->|WAL| Debezium
+    Debezium -->|Events| Kafka
+    Kafka -->|Update| Inventory
+    
+    %% Caching
+    Inventory -->|Cache-Aside| Redis
 ```
