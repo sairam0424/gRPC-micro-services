@@ -66,14 +66,42 @@ export default function ClusterDashboard() {
         {/* My Status Card */}
         <div className="bg-slate-800/50 backdrop-blur-md border border-slate-700 rounded-2xl p-6 shadow-xl">
           <h3 className="text-lg font-semibold text-slate-300 mb-4">Local Node Role</h3>
-          <div className={`text-3xl font-bold ${status?.is_this_node_leader ? 'text-emerald-400' : 'text-blue-400'}`}>
-            {status?.is_this_node_leader ? 'LEADER' : 'REPLICA'}
+          <div className={`text-3xl font-bold ${status?.is_leader ? 'text-emerald-400' : 'text-blue-400'}`}>
+            {status?.is_leader ? 'LEADER' : 'REPLICA'}
           </div>
           <p className="mt-2 text-sm font-mono text-slate-500 truncate">{status?.current_node_id}</p>
         </div>
       </div>
 
-      <h2 className="text-2xl font-semibold mb-6 text-slate-100">Active Nodes & Metrics</h2>
+      <h2 className="text-2xl font-semibold mb-6 text-slate-100">PostgreSQL HA Cluster (Patroni)</h2>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
+        {status?.db_cluster && Object.entries(status.db_cluster).map(([name, info]: [string, any]) => (
+          <div key={name} className={`bg-slate-800/40 border ${info.role === 'leader' ? 'border-amber-500/50' : 'border-slate-700'} rounded-2xl p-6`}>
+            <div className="flex justify-between items-center mb-4">
+              <h4 className="font-mono text-white">{name}</h4>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${info.role === 'leader' ? 'bg-amber-500 text-slate-900' : 'bg-slate-700 text-slate-400'}`}>
+                {info.role.toUpperCase()}
+              </span>
+            </div>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">STATE</span>
+                <span className={info.state === 'running' ? 'text-emerald-400' : 'text-red-400'}>{info.state.toUpperCase()}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">LAG</span>
+                <span className="text-slate-300">{info.lag} MB</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">ENDPOINT</span>
+                <span className="text-slate-400 font-mono">{info.host}:{info.port}</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <h2 className="text-2xl font-semibold mb-6 text-slate-100">Application Nodes & Metrics</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {status?.nodes && Object.entries(status.nodes).map(([id, metrics]: [string, any]) => (
           <div key={id} className={`group relative bg-slate-800/40 backdrop-blur-sm border ${id === status.leader ? 'border-cyan-500/50 shadow-cyan-500/10' : 'border-slate-700'} rounded-2xl p-6 transition-all hover:bg-slate-800/60`}>
@@ -121,9 +149,10 @@ export default function ClusterDashboard() {
             Routing Logic Information
         </h4>
         <p className="text-sm text-slate-400 leading-relaxed">
-            Read requests are automatically routed using a <strong>Metric-Based Load Balancer</strong>. 
-            The system monitors CPU usage and connection counts across all healthy replicas and directs traffic to the 
-            least-stressed node to ensure optimal performance and strong consistency where required.
+            Requests are routed via <strong>HAProxy</strong> to the currently promoted PostgreSQL leader. 
+            Read traffic is balanced across replicas using Patroni's health-check integration. 
+            The application additionally uses a <strong>Metric-Based Load Balancer</strong> to select the best 
+            application node for processing, ensuring end-to-end high availability.
         </p>
       </div>
     </div>
