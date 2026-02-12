@@ -2,6 +2,8 @@ from fastapi import FastAPI, HTTPException, Depends, Request
 import httpx
 import asyncio
 from typing import List, Optional
+import functools
+from contextlib import asynccontextmanager
 from pydantic import BaseModel
 import grpc
 import os
@@ -28,11 +30,32 @@ sys.path.append(GENERATED_DIR)
 
 from order.v1 import order_pb2, order_pb2_grpc
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
+from stream.v1 import stream_pb2, stream_pb2_grpc
 
 # Logger
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Order Processing API Gateway", root_path="/api")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Initialize persistent gRPC channels
+    logger.info("Initializing persistent gRPC channels...")
+    app.state.order_channel = grpc.aio.insecure_channel(ORDER_SERVICE_ADDR)
+    app.state.inventory_channel = grpc.aio.insecure_channel(INVENTORY_SERVICE_ADDR)
+    app.state.stream_channel = grpc.aio.insecure_channel(os.getenv("STREAM_SERVICE_ADDR", "localhost:50053"))
+    
+    app.state.order_stub = order_pb2_grpc.OrderServiceStub(app.state.order_channel)
+    app.state.inventory_stub = inventory_pb2_grpc.InventoryServiceStub(app.state.inventory_channel)
+    app.state.stream_stub = stream_pb2_grpc.StreamServiceStub(app.state.stream_channel)
+    
+    yield
+    
+    # Shutdown: Close channels
+    logger.info("Closing gRPC channels...")
+    await app.state.order_channel.close()
+    await app.state.inventory_channel.close()
+    await app.state.stream_channel.close()
+
+app = FastAPI(title="Order Processing API Gateway", lifespan=lifespan)
 
 from .auth import verify_jwt
 from .bloom_filter import bloom_manager
@@ -164,11 +187,46 @@ class CreateOrderRequest(BaseModel):
     customer_id: str
     items: List[OrderItem]
 
-def get_order_channel():
-    return grpc.insecure_channel(ORDER_SERVICE_ADDR)
+def grpc_retry(retries=3, delay=1):
+    """Decorator to retry gRPC calls on transient errors"""
+    def decorator(func):
+        @functools.wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_err = None
+            for i in range(retries):
+                try:
+                    return await func(*args, **kwargs)
+                except grpc.RpcError as e:
+                    last_err = e
+                    # Retry on UNAVAILABLE (often during restart/hot-reload)
+                    if e.code() == grpc.StatusCode.UNAVAILABLE:
+                        logger.warning(f"gRPC service unavailable (attempt {i+1}/{retries}). Retrying in {delay}s...")
+                        await asyncio.sleep(delay)
+                        continue
+                    raise
+            raise last_err
+        return wrapper
+    return decorator
 
-def get_inventory_channel():
-    return grpc.insecure_channel(INVENTORY_SERVICE_ADDR)
+@app.get("/inventory", dependencies=[Depends(verify_jwt)])
+@grpc_retry()
+async def list_inventory():
+    try:
+        rpc_request = inventory_pb2.ListInventoryRequest()
+        response = await app.state.inventory_stub.ListInventory(rpc_request)
+        return {
+            "inventory": [
+                {
+                    "product_id": item.product_id,
+                    "quantity": item.quantity
+                } for item in response.items
+            ]
+        }
+    except Exception as e:
+        logger.error(f"Inventory Service gRPC call failed: {e}")
+        if isinstance(e, grpc.RpcError):
+             raise HTTPException(status_code=503, detail=f"Inventory Service unavailable: {e.details()}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
 async def health():
@@ -235,24 +293,6 @@ async def health():
 async def root():
     return {"message": "Welcome to Order Processing API Gateway", "status": "Online"}
 
-@app.get("/inventory", dependencies=[Depends(verify_jwt)])
-async def list_inventory():
-    try:
-        with get_inventory_channel() as channel:
-            stub = inventory_pb2_grpc.InventoryServiceStub(channel)
-            rpc_request = inventory_pb2.ListInventoryRequest()
-            response = stub.ListInventory(rpc_request)
-            return {
-                "inventory": [
-                    {
-                        "product_id": item.product_id,
-                        "quantity": item.quantity
-                    } for item in response.items
-                ]
-            }
-    except Exception as e:
-        logger.error(f"Inventory Service gRPC call failed: {e}")
-        raise HTTPException(status_code=503, detail=f"Inventory Service unavailable: {e}")
 
 @app.get("/metrics/filters")
 async def get_filter_metrics():
@@ -296,6 +336,7 @@ async def set_stress(level: float):
     return {"status": "success", "stress_level": load_shedder.stress_level}
 
 @app.post("/orders")
+@grpc_retry()
 async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_jwt), req_obj: Request = None):
     # Use the verified user_id instead of whatever the client sent for safety
     customer_id = req_obj.state.user_id if req_obj else request.customer_id
@@ -310,59 +351,55 @@ async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_
             )
 
     try:
-        with get_order_channel() as channel:
-            stub = order_pb2_grpc.OrderServiceStub(channel)
-            
-            # Map items
-            rpc_items = [
-                order_pb2.OrderItem(
-                    product_id=item.product_id,
-                    quantity=item.quantity,
-                    price=item.price
-                ) for item in request.items
-            ]
-            
-            rpc_request = order_pb2.CreateOrderRequest(
-                customer_id=str(customer_id),
-                items=rpc_items
-            )
-            
-            response = stub.CreateOrder(rpc_request)
-            return {
-                "order_id": response.order_id,
-                "status": order_pb2.OrderStatus.Name(response.status)
-            }
+        # Map items
+        rpc_items = [
+            order_pb2.OrderItem(
+                product_id=item.product_id,
+                quantity=item.quantity,
+                price=item.price
+            ) for item in request.items
+        ]
+        
+        rpc_request = order_pb2.CreateOrderRequest(
+            customer_id=str(customer_id),
+            items=rpc_items
+        )
+        
+        response = await app.state.order_stub.CreateOrder(rpc_request)
+        return {
+            "order_id": response.order_id,
+            "status": order_pb2.OrderStatus.Name(response.status)
+        }
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
             raise HTTPException(status_code=400, detail=f"Order rejected: {e.details()}")
         raise HTTPException(status_code=503, detail=f"Order Service error: {e.details()}")
 
 @app.get("/orders")
+@grpc_retry()
 async def list_orders(customer_id: Optional[str] = None, user: dict = Depends(verify_jwt), req_obj: Request = None):
     # If no customer_id provided, filter by the logged-in user
     id_to_query = customer_id or req_obj.state.user_id
     
     try:
-        with get_order_channel() as channel:
-            stub = order_pb2_grpc.OrderServiceStub(channel)
-            rpc_request = order_pb2.ListOrdersRequest(customer_id=str(id_to_query))
-            response = stub.ListOrders(rpc_request)
-            return {
-                "orders": [
-                    {
-                        "order_id": order.order_id,
-                        "customer_id": order.customer_id,
-                        "status": order_pb2.OrderStatus.Name(order.status),
-                        "items": [
-                            {
-                                "product_id": item.product_id,
-                                "quantity": item.quantity,
-                                "price": item.price
-                            } for item in order.items
-                        ]
-                    } for order in response.orders
-                ]
-            }
+        rpc_request = order_pb2.ListOrdersRequest(customer_id=str(id_to_query))
+        response = await app.state.order_stub.ListOrders(rpc_request)
+        return {
+            "orders": [
+                {
+                    "order_id": order.order_id,
+                    "customer_id": order.customer_id,
+                    "status": order_pb2.OrderStatus.Name(order.status),
+                    "items": [
+                        {
+                            "product_id": item.product_id,
+                            "quantity": item.quantity,
+                            "price": item.price
+                        } for item in order.items
+                    ]
+                } for order in response.orders
+            ]
+        }
     except grpc.RpcError as e:
         raise HTTPException(status_code=503, detail=f"Order Service unavailable: {e.details()}")
 
@@ -381,7 +418,7 @@ async def stream_order_updates(
     """
     id_to_stream = customer_id or req_obj.state.user_id
     return StreamingResponse(
-        order_status_streamer(str(id_to_stream)),
+        order_status_streamer(str(id_to_stream), app.state.stream_stub),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -391,24 +428,23 @@ async def stream_order_updates(
     )
 
 @app.get("/orders/{order_id}", dependencies=[Depends(verify_jwt)])
+@grpc_retry()
 async def get_order(order_id: str):
     try:
-        with get_order_channel() as channel:
-            stub = order_pb2_grpc.OrderServiceStub(channel)
-            rpc_request = order_pb2.GetOrderRequest(order_id=order_id)
-            response = stub.GetOrder(rpc_request)
-            return {
-                "order_id": response.order_id,
-                "customer_id": response.customer_id,
-                "status": order_pb2.OrderStatus.Name(response.status),
-                "items": [
-                    {
-                        "product_id": item.product_id,
-                        "quantity": item.quantity,
-                        "price": item.price
-                    } for item in response.items
-                ]
-            }
+        rpc_request = order_pb2.GetOrderRequest(order_id=order_id)
+        response = await app.state.order_stub.GetOrder(rpc_request)
+        return {
+            "order_id": response.order_id,
+            "customer_id": response.customer_id,
+            "status": order_pb2.OrderStatus.Name(response.status),
+            "items": [
+                {
+                    "product_id": item.product_id,
+                    "quantity": item.quantity,
+                    "price": item.price
+                } for item in response.items
+            ]
+        }
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Order not found")
