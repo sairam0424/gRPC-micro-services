@@ -1,0 +1,3 @@
+"postgres" "adminpass"
+"repl_user" "repl_pass"
+"neondb_owner" "npg_Fj6bG0DcStVr"

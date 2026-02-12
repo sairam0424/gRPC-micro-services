@@ -19,14 +19,12 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 engine = create_engine(
     DATABASE_URL,
-    poolclass=NullPool,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=3600,
     connect_args={
-        "sslmode": "require",
+        "sslmode": "require" if "neon.tech" in DATABASE_URL else "prefer",
         "connect_timeout": 10,
-        "keepalives": 1,
-        "keepalives_idle": 30,
-        "keepalives_interval": 10,
-        "keepalives_count": 5,
     }
 )
 
