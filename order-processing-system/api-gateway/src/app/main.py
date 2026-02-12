@@ -271,6 +271,20 @@ async def get_filter_metrics():
     metrics_data.update(resilience_metrics)
     return metrics_data
 
+@app.get("/cluster/status", dependencies=[Depends(verify_jwt)])
+async def get_cluster_status():
+    """Proxy Raft Cluster Status from Inventory Service"""
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(f"http://{os.getenv('INVENTORY_SERVICE_HOST', 'inventory-service')}:8001/cluster/status", timeout=2.0)
+            if resp.status_code == 200:
+                return resp.json()
+            else:
+                raise HTTPException(status_code=resp.status_code, detail="Failed to fetch cluster status")
+    except Exception as e:
+        logger.error(f"Cluster Status fetch failed: {e}")
+        raise HTTPException(status_code=503, detail=f"Inventory Service cluster status unavailable: {e}")
+
 # Initialize load shedder with redis client for metrics
 load_shedder.redis_client = bloom_manager.redis_client
 

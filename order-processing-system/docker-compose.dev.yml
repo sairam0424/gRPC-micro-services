@@ -115,15 +115,20 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REPLICA_DATABASE_URL=${REPLICA_DATABASE_URL}
+      - REPLICA2_DATABASE_URL=${REPLICA2_DATABASE_URL}
+      - ETCD_HOST=${ETCD_HOST}
+      - ETCD_PORT=${ETCD_PORT}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 30s
     depends_on:
       kafka:
         condition: service_healthy
@@ -351,7 +356,6 @@ services:
 
   redis:
     image: redis/redis-stack:latest
-    platform: linux/arm64
     ports:
       - "6379:6379"
       - "8003:8001" # Redis Insight
@@ -369,7 +373,6 @@ services:
 
   redis-exporter:
     image: oliver006/redis_exporter:latest
-    platform: linux/arm64
     environment:
       - REDIS_ADDR=redis:6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -383,7 +386,6 @@ services:
 
   redis-commander:
     image: ghcr.io/joeferner/redis-commander:latest
-    platform: linux/arm64
     environment:
       - REDIS_HOSTS=local:redis:6379:0:${REDIS_PASSWORD}
     ports:
@@ -395,6 +397,59 @@ services:
     networks:
       - grpc-net
 
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.0
+    command:
+      - /usr/local/bin/etcd
+      - --name=etcd
+      - --data-dir=/etcd-data
+      - --advertise-client-urls=http://etcd:2379
+      - --listen-client-urls=http://0.0.0.0:2379
+      - --initial-advertise-peer-urls=http://etcd:2380
+      - --listen-peer-urls=http://0.0.0.0:2380
+      - --initial-cluster=etcd=http://etcd:2380
+      - --initial-cluster-state=new
+      - --initial-cluster-token=etcd-cluster-1
+      - --enable-v2=true
+    ports:
+      - "2379:2379"
+      - "2380:2380"
+    volumes:
+      - etcd-data:/etcd-data
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/etcdctl", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  haproxy:
+    image: haproxy:2.8
+    volumes:
+      - ./proxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "5438:5432"
+      - "5439:5433"
+      - "5440:5434"
+      - "8405:8404"
+    networks:
+      - grpc-net
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    ports:
+      - "6432:6432"
+    volumes:
+      - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    environment:
+      - DATABASE_URL=postgres://neondb_owner:npg_Fj6bG0DcStVr@haproxy:5432/neondb
+    depends_on:
+      - haproxy
+    networks:
+      - grpc-net
+
 
 networks:
   grpc-net:
@@ -402,3 +457,4 @@ networks:
 
 volumes:
   inventory-data:
+  etcd-data:
