@@ -5,9 +5,13 @@ This system is composed of multiple microservices communicating via gRPC, adheri
 
 ### Components
 
-1.  **API Gateway (Python FastAPI)**:
-    *   **Structure**: Uses the `src` layout with `pyproject.toml`.
-    *   **Responsibility**: REST endpoints, authentication (planned), and gRPC client for internal services. Now includes a **Tier-1 Bloom Filter** for catalog existence pre-filtering.
+1.  **Envoy Proxy**:
+    *   **Responsibility**: L7 load balancer for gRPC and HTTP/2. Manages health checks, retries, and circuit breaking for the API Gateway cluster.
+    *   **LB Policy**: Least Connection + Consistent Hashing.
+2.  **API Gateway Cluster (Python FastAPI)**:
+    *   **Structure**: Multiple replicas (e.g., `api-gateway-1`, `api-gateway-2`).
+    *   **Responsibility**: REST endpoints, authentication, and gRPC hub. Includes Tier-1 Bloom Filter.
+    **Tier-1 Bloom Filter** for catalog existence pre-filtering.
     *   **Path**: `api-gateway/src/app/`
 2.  **Order Service (Go)**:
     *   **Structure**: Follows Standard Go Layout (`cmd/`, `internal/`, `pkg/`).
@@ -46,11 +50,16 @@ flowchart TD
         Dashboard[Cluster Dashboard]
     end
 
-    subgraph "API Gateway Layer"
+    subgraph "Ingress & Load Balancing"
         Proxy[Nginx Proxy]
-        Gateway[API Gateway]
+        Envoy[Envoy LB]
     end
 
+    subgraph "API Gateway Cluster"
+        GW1[API Gateway 1]
+        GW2[API Gateway 2]
+    end
+ drum
     subgraph "High Availability Orchestration"
         HAProxy[HAProxy\nStable DB Endpoints]
         Patroni["Patroni\n(Node Manager)"]
@@ -79,8 +88,11 @@ flowchart TD
 
     %% Flow
     Client -->|REST| Proxy
-    Proxy --> Gateway
-    Gateway -->|gRPC| Inventory
+    Proxy --> Envoy
+    Envoy --> GW1
+    Envoy --> GW2
+    GW1 -->|gRPC| Inventory
+    GW2 -->|gRPC| Inventory
     Dashboard -->|Metrics| Gateway
     
     Inventory -->|Write| HAProxy:5432
