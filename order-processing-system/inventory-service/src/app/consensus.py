@@ -15,20 +15,26 @@ class RaftConsensusManager:
         self.port = int(os.getenv("ETCD_PORT", 2379))
         self.etcd = etcd3.client(host=self.host, port=self.port)
         self.node_id = socket.gethostname()
-        self.lease_ttl = 10
+        self.lease_ttl = 30 # Increased for stability during startup
         self.lease = None
         self.is_leader = False
         self._stop_event = asyncio.Event()
 
     async def register_node(self):
         """Register node in etcd and start heartbeat"""
-        self.lease = self.etcd.lease(self.lease_ttl)
-        # Register node metrics
-        await self.update_metrics()
-        # Start heartbeat task
-        asyncio.create_task(self.heartbeat_loop())
-        # Start leader election task
-        asyncio.create_task(self.election_loop())
+        try:
+            # Wrap in a small timeout to avoid hanging the lifespan
+            self.lease = self.etcd.lease(self.lease_ttl)
+            # Register node metrics
+            await self.update_metrics()
+            # Start heartbeat task
+            asyncio.create_task(self.heartbeat_loop())
+            # Start leader election task
+            asyncio.create_task(self.election_loop())
+        except Exception as e:
+            logger.error(f"Failed to register node with etcd: {e}")
+            # We don't want to crash the whole app if etcd is just starting up
+            # but we won't have leader election or node status in the dashboard
 
     async def heartbeat_loop(self):
         while not self._stop_event.is_set():
@@ -92,5 +98,25 @@ class RaftConsensusManager:
     def get_leader(self) -> Optional[str]:
         val = self.etcd.get("/leader")[0]
         return val.decode() if val else None
+
+    def get_db_cluster_status(self) -> Dict[str, dict]:
+        """Get PostgreSQL HA cluster status from Patroni's etcd namespace"""
+        db_nodes = {}
+        # Patroni scope is 'pg-cluster'
+        prefix = "/service/pg-cluster/members/"
+        try:
+            for value, metadata in self.etcd.get_prefix(prefix):
+                node_name = metadata.key.decode().split("/")[-1]
+                data = json.loads(value.decode())
+                db_nodes[node_name] = {
+                    "role": data.get("role"),
+                    "state": data.get("state"),
+                    "host": data.get("host"),
+                    "port": data.get("port"),
+                    "lag": data.get("lag", 0)
+                }
+        except Exception as e:
+            logger.error(f"Failed to fetch DB cluster status: {e}")
+        return db_nodes
 
 consensus_manager = RaftConsensusManager()

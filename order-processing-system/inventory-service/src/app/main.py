@@ -28,7 +28,7 @@ GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
 sys.path.append(GENERATED_DIR)
 
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
-from .database import init_db, get_db, writer_session
+from .database import init_db, get_db, writer_session, reader_sessions
 from .models import InventoryItem
 from .bloom_filter import filter_manager
 from .cache import cache_manager
@@ -100,7 +100,7 @@ async def lifespan(app: FastAPI):
         if filter_manager.redis_client.set(lock_key, "locked", nx=True, ex=60):
             try:
                 logger.info("Acquired seeding lock. Starting Bloom/Cuckoo filter population...")
-                async with reader_session() as session:
+                async with writer_session() as session:
                     # We need to import crud here or ensure it's available
                     from . import crud
                     items = await crud.get_all_inventory(session)
@@ -124,7 +124,7 @@ async def lifespan(app: FastAPI):
     # Cache Warming Task (Industry Practice)
     async def cache_warming():
         logger.info("Starting industry-standard Cache Warming pipeline from REPLICA...")
-        async with reader_session() as session:
+        async with writer_session() as session:
             from . import crud
             # Warm cache with Top 100 items (or all for this demo)
             items = await crud.get_all_inventory(session)
@@ -222,12 +222,13 @@ async def health():
     return health_status
 
 @app.get("/cluster/status")
-async def cluster_status():
-    """Endpoint to view Raft Cluster Status and Metrics"""
+async def get_cluster_status():
+    """Get the current status of the Raft cluster (App + DB)"""
     return {
         "leader": consensus_manager.get_leader(),
-        "is_this_node_leader": consensus_manager.is_leader,
+        "is_leader": consensus_manager.is_leader,
         "nodes": consensus_manager.get_all_nodes(),
+        "db_cluster": consensus_manager.get_db_cluster_status(),
         "current_node_id": consensus_manager.node_id
     }
 
@@ -255,14 +256,18 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=cached_qty)
 
             # Route eventual consistency read to REPLICA
-            async with reader_session() as session:
-                item = await crud.get_inventory_item(session, request.product_id)
-                quantity = item.quantity if item else 0
-                
-                # 3. Populate Cache
-                cache_manager.set_stock(request.product_id, quantity)
-                
-                return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=quantity)
+            try:
+                async with writer_session() as session:
+                    item = await crud.get_inventory_item(session, request.product_id)
+                    quantity = item.quantity if item else 0
+                    
+                    # 3. Populate Cache
+                    cache_manager.set_stock(request.product_id, quantity)
+                    
+                    return inventory_pb2.CheckStockResponse(product_id=request.product_id, quantity=quantity)
+            except Exception as e:
+                logger.error(f"Error in CheckStock: {e}", exc_info=True)
+                await context.abort(grpc.StatusCode.INTERNAL, f"Database error for {request.product_id}: {str(e)}")
 
     async def ReserveStock(self, request, context):
         # Tier-2 Bloom Filter Check: Is the product likely in stock?
@@ -327,21 +332,27 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                     new_quantity=db_item.quantity
                 )
             except Exception as e:
+                logger.error(f"Error in UpdateStock: {e}", exc_info=True)
                 await session.rollback()
-                context.abort(grpc.StatusCode.INTERNAL, str(e))
+                await context.abort(grpc.StatusCode.INTERNAL, str(e))
 
     async def ListInventory(self, request, context):
         # Route eventual consistency list to REPLICA
-        async with get_db() as session:
-            try:
-                items = await crud.get_all_inventory(session)
-                return inventory_pb2.ListInventoryResponse(
-                    items=[
-                        inventory_pb2.InventoryItem(
-                            product_id=item.product_id,
-                            quantity=item.quantity
-                        ) for item in items
-                    ]
-                )
-            except Exception as e:
-                context.abort(grpc.StatusCode.INTERNAL, str(e))
+        try:
+            async with reader_sessions["replica1"]() as session:
+                try:
+                    items = await crud.get_all_inventory(session)
+                    return inventory_pb2.ListInventoryResponse(
+                        items=[
+                            inventory_pb2.InventoryItem(
+                                product_id=item.product_id,
+                                quantity=item.quantity
+                            ) for item in items
+                        ]
+                    )
+                except Exception as e:
+                    logger.error(f"CRUD error in ListInventory: {e}", exc_info=True)
+                    await context.abort(grpc.StatusCode.INTERNAL, str(e))
+        except Exception as e:
+            logger.error(f"Session error in ListInventory: {e}", exc_info=True)
+            await context.abort(grpc.StatusCode.INTERNAL, f"Failed to acquire database session: {str(e)}")

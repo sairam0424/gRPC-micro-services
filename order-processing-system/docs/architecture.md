@@ -37,8 +37,7 @@ This system is composed of multiple microservices communicating via gRPC, adheri
 ├── proto/                  # Protobuf definitions
 ├── docs/                   # Documentation
 ├── Makefile                # Automation (code gen, etc)
-└── docker-compose.yml      # Orchestration
-```
+└── docker-compose.yml      ## Architecture (Raft Cluster + Multi-Replica CDC + Patroni HA)
 
 ```mermaid
 flowchart TD
@@ -52,13 +51,18 @@ flowchart TD
         Gateway[API Gateway]
     end
 
+    subgraph "High Availability Orchestration"
+        HAProxy[HAProxy\nStable DB Endpoints]
+        Patroni["Patroni\n(Node Manager)"]
+        ETCD[(etcd - Raft Consensus)]
+    end
+
     subgraph "Inventory Service (Raft Cluster)"
         Inventory[Inventory Service]
-        ETCD[(etcd - Raft Consensus)]
         MetricsRouter{Metric-Based Router}
     end
 
-    subgraph "Database Tier (Multi-Replica)"
+    subgraph "PostgreSQL Cluster (HA)"
         LeaderDB[(Postgres Leader\nWrites + Strong Reads)]
         Replica1[(Postgres Replica 1\nEventual Reads)]
         Replica2[(Postgres Replica 2\nEventual Reads)]
@@ -79,15 +83,20 @@ flowchart TD
     Gateway -->|gRPC| Inventory
     Dashboard -->|Metrics| Gateway
     
-    Inventory -->|Write| LeaderDB
-    Inventory -->|Strong Read| LeaderDB
+    Inventory -->|Write| HAProxy:5432
+    Inventory -->|Strong Read| HAProxy:5432
     Inventory --> MetricsRouter
-    MetricsRouter -->|Lowest CPU| Replica1
-    MetricsRouter -->|Lowest CPU| Replica2
+    MetricsRouter -->|Lowest CPU| HAProxy:5433
 
-    %% Raft & Consensus
-    Inventory <-->|Leader Election| ETCD
-    Inventory -->|Heartbeat/Metrics| ETCD
+    %% HA & Consensus
+    HAProxy -->|Route to Leader| LeaderDB
+    HAProxy -->|Route to Replicas| Replica1
+    HAProxy -->|Route to Replicas| Replica2
+    Patroni -->|Manage| LeaderDB
+    Patroni -->|Manage| Replica1
+    Patroni -->|Manage| Replica2
+    Patroni <-->|Leader State| ETCD
+    Inventory <-->|Service State| ETCD
 
     %% Replication & CDC
     LeaderDB -->|Streaming Rep| Replica1

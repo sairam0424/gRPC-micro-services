@@ -5,7 +5,7 @@ import { useAuth } from "@/context/auth-context";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
-// import { hashPassword } from "@/lib/utils"; // Remove - file doesn't exist
+import { hashPassword } from "@/lib/utils";
 
 export default function SignupPage() {
   const [username, setUsername] = useState("");
