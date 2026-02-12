@@ -5,8 +5,9 @@ COPY pyproject.toml .
 RUN mkdir src
 COPY src/ ./src/
 
-# Install dependencies including the package itself
-RUN pip install --no-cache-dir .
+# Install protobuf to fix incompatibility
+RUN pip install --no-cache-dir protobuf==4.25.1 && \
+    pip install --no-cache-dir .
 
 FROM python:3.10-slim
 

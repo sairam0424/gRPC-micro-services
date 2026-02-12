@@ -37,13 +37,13 @@ This system is composed of multiple microservices communicating via gRPC, adheri
 ├── proto/                  # Protobuf definitions
 ├── docs/                   # Documentation
 ├── Makefile                # Automation (code gen, etc)
-└── docker-compose.yml      # Orchestration
-```
+└── docker-compose.yml      ## Architecture (Raft Cluster + Multi-Replica CDC + Patroni HA)
 
 ```mermaid
 flowchart TD
     subgraph "Clients"
         Client[Web Browser]
+        Dashboard[Cluster Dashboard]
     end
 
     subgraph "API Gateway Layer"
@@ -51,14 +51,21 @@ flowchart TD
         Gateway[API Gateway]
     end
 
-    subgraph "Inventory Service (Read/Write Routing)"
-        Inventory[Inventory Service]
-        ReadRouter{Read Router}
+    subgraph "High Availability Orchestration"
+        HAProxy[HAProxy\nStable DB Endpoints]
+        Patroni["Patroni\n(Node Manager)"]
+        ETCD[(etcd - Raft Consensus)]
     end
 
-    subgraph "Database Tier (Leader-Replica)"
+    subgraph "Inventory Service (Raft Cluster)"
+        Inventory[Inventory Service]
+        MetricsRouter{Metric-Based Router}
+    end
+
+    subgraph "PostgreSQL Cluster (HA)"
         LeaderDB[(Postgres Leader\nWrites + Strong Reads)]
-        ReplicaDB[(Postgres Replica\nEventual Reads)]
+        Replica1[(Postgres Replica 1\nEventual Reads)]
+        Replica2[(Postgres Replica 2\nEventual Reads)]
     end
 
     subgraph "CDC Pipeline"
@@ -74,21 +81,41 @@ flowchart TD
     Client -->|REST| Proxy
     Proxy --> Gateway
     Gateway -->|gRPC| Inventory
+    Dashboard -->|Metrics| Gateway
     
-    Inventory -->|Write| LeaderDB
-    Inventory -->|Strong Read| LeaderDB
-    Inventory --> ReadRouter
-    ReadRouter -->|Eventual Read| ReplicaDB
+    Inventory -->|Write| HAProxy:5432
+    Inventory -->|Strong Read| HAProxy:5432
+    Inventory --> MetricsRouter
+    MetricsRouter -->|Lowest CPU| HAProxy:5433
+
+    %% HA & Consensus
+    HAProxy -->|Route to Leader| LeaderDB
+    HAProxy -->|Route to Replicas| Replica1
+    HAProxy -->|Route to Replicas| Replica2
+    Patroni -->|Manage| LeaderDB
+    Patroni -->|Manage| Replica1
+    Patroni -->|Manage| Replica2
+    Patroni <-->|Leader State| ETCD
+    Inventory <-->|Service State| ETCD
 
     %% Replication & CDC
-    LeaderDB -->|Streaming Rep| ReplicaDB
+    LeaderDB -->|Streaming Rep| Replica1
     LeaderDB -->|WAL| Debezium
     Debezium -->|Events| Kafka
-    Kafka -->|Update| Inventory
+    Kafka -->|Async Rep| Inventory
+    Inventory -->|Apply Changes| Replica2
     
     %% Caching
     Inventory -->|Cache-Aside| Redis
 ```
+
+## Resilience & High Availability
+The system now implements **Industry Standard High Availability**:
+1.  **Raft Consensus**: Uses `etcd` for distributed leader election and cluster state management.
+2.  **Multi-Replica Routing**: Metric-based routing (CPU, connections, health) ensures traffic is directed to the most optimal node.
+3.  **Hybrid Replication**:
+    *   **Native Streaming**: Replica 1 uses standard Postgres streaming replication.
+    *   **Async CDC**: Replica 2 uses Kafka-based CDC (Debezium) for eventually consistent updates.
 
 ## Resilience Patterns
 
