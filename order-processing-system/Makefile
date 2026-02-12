@@ -113,6 +113,12 @@ loki:
 kafka-ui:
 	open http://localhost:8080
 
+envoy-admin:
+	open http://localhost:9901
+
+envoy-logs:
+	docker compose -f docker-compose.dev.yml logs -f envoy
+
 redis-insight:
 	open http://localhost:8003
 
@@ -144,5 +150,7 @@ help:
 	@echo "  kafka-ui     - Open Kafka UI (Topics & Messages)"
 	@echo "  redis-insight - Open RedisInsight Dashboard"
 	@echo "  redis-commander - Open Redis Commander UI"
+	@echo "  envoy-admin   - Open Envoy Admin UI (Metrics & Cluster stats)"
+	@echo "  envoy-logs    - Follow Envoy proxy logs"
 
 .DEFAULT_GOAL := help
