@@ -106,6 +106,8 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <a href="/cluster" className="text-sm font-medium text-zinc-400 hover:text-cyan-400 transition-colors">Cluster Dashboard</a>
+            <div className="h-4 w-px bg-zinc-800" />
             <CreateOrderDialog onOrderCreated={(newOrder) => setOrders(prev => [newOrder, ...prev])} />
             <div className="h-8 w-px bg-zinc-800" />
             <UserNav />

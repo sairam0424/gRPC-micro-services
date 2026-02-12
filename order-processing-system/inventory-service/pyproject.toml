@@ -19,7 +19,10 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi",
     "opentelemetry-instrumentation-grpc",
     "opentelemetry-instrumentation-logging",
-    "redis>=4.2.0"
+    "redis>=4.2.0",
+    "etcd3",
+    "psutil",
+    "protobuf>=4.25.1"
 ]
 requires-python = ">=3.10"
 
