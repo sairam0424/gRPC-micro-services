@@ -34,12 +34,50 @@ services:
           target: /app
           action: sync
 
-  api-gateway:
+  api-gateway-1:
     build:
       context: ./api-gateway
       dockerfile: Dockerfile
     ports:
-      - "8100:8000"
+      - "8101:8000"
+    volumes:
+      - ./api-gateway/src:/app/src
+    environment:
+      - ORDER_SERVICE_ADDR=order-service:50051
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
+      - STREAM_SERVICE_ADDR=order-streamer:50053
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      order-service:
+        condition: service_healthy
+      order-streamer:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    networks:
+      - grpc-net
+    develop:
+      watch:
+        - path: ./api-gateway/src
+          target: /app/src
+          action: sync
+
+  api-gateway-2:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8102:8000"
     volumes:
       - ./api-gateway/src:/app/src
     environment:
@@ -213,8 +251,8 @@ services:
       - /app/.next
     command: npm run dev
     depends_on:
-      api-gateway:
-        condition: service_healthy
+      envoy:
+        condition: service_started
       inventory-service:
         condition: service_healthy
       auth-service:
@@ -238,9 +276,25 @@ services:
       - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "80:80"
+      - "8081:80" # Temporary port for Nginx if Envoy is on 80
     depends_on:
-      - api-gateway
+      - envoy
       - web-client
+    networks:
+      - grpc-net
+
+  envoy:
+    image: envoyproxy/envoy:v1.29-latest
+    ports:
+      - "8085:80"   # Envoy Proxy ingress (redirected from 80 which Nginx uses)
+      - "9901:9901" # Admin UI
+    volumes:
+      - ./proxy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    depends_on:
+      api-gateway-1:
+        condition: service_healthy
+      api-gateway-2:
+        condition: service_healthy
     networks:
       - grpc-net
 

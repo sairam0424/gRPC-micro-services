@@ -6,7 +6,7 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Multi-Replica Raft Cluster**: Distributed leader election and state management using `etcd`.
 - **Metric-Based Read Routing**: Intelligent routing based on real-time CPU and connection metrics.
 - **Hybrid CDC Replication**: Postgres streaming + Kafka-based async CDC.
-- **API Gateway (FastAPI)**: REST interface, JWT Authentication, Rate Limiting, and Load Shedding.
+- **API Gateways (FastAPI)**: Distributed cluster (Multi-replica) for high availability and horizontal scaling.
 - **Rate Limiting**: Distributed Token Bucket using Redis.
 - **Load Shedding**: Graceful degradation under stress.
 - **Tier-1 Bloom Filter** for catalog existence pre-filtering.
@@ -15,7 +15,17 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Redis Stack** provides the backbone for the Bloom filters, Cuckoo filters, and the caching layer.
 - **Order Streamer (Go)** consumes Kafka events and exposes a gRPC server-streaming API.
 - **Web Client (Next.js)** consumes REST + SSE to display live order updates.
+- **Nginx Proxy** routes `/` to the UI and `/api` to the gateway.- **Rate Limiting**: Distributed Token Bucket using Redis.
+- **Load Shedding**: Graceful degradation under stress.
+- **Tier-1 Bloom Filter** for catalog existence pre-filtering.
+- **Order Service (Go)** persists orders and publishes events to Kafka.
+- **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL, now with a **Tier-2 Cuckoo Filter** for fast in-stock checks and a **high-performance Redis Cache (Cache-Aside)** with request coalescing and jitter.
+- **Redis Stack** provides the backbone for the Bloom filters, Cuckoo filters, and the caching layer.
+- **Order Streamer (Go)** consumes Kafka events and exposes a gRPC server-streaming API.
+- **Web Client (Next.js)** consumes REST + SSE to display live order updates.
 - **Nginx Proxy** routes `/` to the UI and `/api` to the gateway.
+- **Envoy Proxy**: High-performance L7 load balancer for gRPC and HTTP/2 traffic distribution using Least Connection + Consistent Hashing.
+- **Nginx Proxy**: Edge ingress routing for frontend and API traffic.
 - **Full Observability**: OpenTelemetry, Jaeger, Prometheus, Loki, and Grafana.
 - **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
 - **Admin Visibility**: Kafka UI, **RedisInsight**, and **Redis Commander**.
@@ -29,9 +39,14 @@ flowchart TD
         Dashboard[Cluster Dashboard]
     end
 
-    subgraph "API Gateway Layer"
+    subgraph "Ingress & Load Balancing"
         Proxy[Nginx Proxy]
-        Gateway[API Gateway]
+        Envoy[Envoy LB]
+    end
+
+    subgraph "API Gateway Cluster"
+        GW1[API Gateway 1]
+        GW2[API Gateway 2]
     end
 
     subgraph "Inventory Service (Raft Cluster)"
@@ -57,9 +72,12 @@ flowchart TD
 
     %% Flow
     Client -->|REST| Proxy
-    Proxy --> Gateway
-    Gateway -->|gRPC| Inventory
-    Dashboard -->|Metrics| Gateway
+    Proxy --> Envoy
+    Envoy --> GW1
+    Envoy --> GW2
+    GW1 -->|gRPC| Inventory
+    GW2 -->|gRPC| Inventory
+    Dashboard -->|Metrics| Envoy
     
     Inventory -->|Write| LeaderDB
     Inventory -->|Strong Read| LeaderDB
@@ -101,31 +119,34 @@ The system features a sophisticated database architecture designed for scaling a
 
 To get the full Leader-Replica + CDC flow running with Neon:
 
-1. **Enable Logical Replication**:
-   - Go to your **Neon Console**.
-   - Navigate to **Settings** -> **Database Configuration**.
-   - Set `wal_level` to `logical`. (Note: This is required for Debezium to read the WAL).
-2. **Configure Environment**:
-   Ensure your `.env` file has both the leader and replica strings:
-   ```env
-   DATABASE_URL=postgresql+asyncpg://... (Leader)
-   REPLICA_DATABASE_URL=postgresql+asyncpg://... (Replica)
-   ```
-3. **Start the Infrastructure**:
-   ```bash
-   make up-dev
-   ```
-4. **Register the CDC Connector**:
-   Run the following command to POST the connector configuration to the Debezium service:
-   ```bash
-   make cdc-setup
-   ```
-5. **Verify**:
-   Open the **Kafka UI** (`http://localhost:8080`) to see the CDC events flowing into the `inventory_cdc` topics.
+1.  **Enable Logical Replication**:
+    - Go to your **Neon Console**.
+    - Navigate to **Settings** -> **Database Configuration**.
+    - Set `wal_level` to `logical`. (Note: This is required for Debezium to read the WAL).
+2.  **Configure Environment**:
+    Ensure your `.env` file has both the leader and replica strings:
+    ```env
+    DATABASE_URL=postgresql+asyncpg://... (Leader)
+    REPLICA_DATABASE_URL=postgresql+asyncpg://... (Replica)
+    ```
+3.  **Start the Infrastructure**:
+    ```bash
+    make up-dev
+    ```
+4.  **Register the CDC Connector**:
+    Run the following command to POST the connector configuration to the Debezium service:
+    ```bash
+    make cdc-setup
+    ```
+5.  **Verify**:
+    Open the **Kafka UI** (`http://localhost:8080`) to see the CDC events flowing into the `inventory_cdc` topics.
 
 ## Services and Ports
-- **proxy (nginx)**: `http://localhost` (routes `/` and `/api`)
-- **api-gateway**: internal `:8000` (FastAPI REST + SSE)
+
+- **proxy (nginx)**: `http://localhost` (Edge ingress)
+- **envoy**: `http://localhost:8085` (Internal LB), Admin: `:9901`
+- **api-gateway-1**: internal `:8000` (Replica 1)
+- **api-gateway-2**: internal `:8000` (Replica 2)
 - **order-service**: internal `:50051` (gRPC)
 - **inventory-service**: internal `:50052` (gRPC + REST health)
 - **order-streamer**: internal `:50053` (gRPC streaming)
@@ -185,6 +206,7 @@ The system utilizes a high-performance caching layer in the `inventory-service` 
 | **RedisInsight** | `http://localhost:8003` | Native Redis UI for memory analysis and profiling. |
 | **Redis Commander** | `http://localhost:8081` | Web-based Redis key management. |
 | **Kafka UI** | `http://localhost:8080` | Monitor topics and `inventory.updated` events. |
+| **Envoy Admin** | `http://localhost:9901` | Traffic distribution metrics & cluster health. |
 | **Prometheus** | `http://localhost:9090` | Raw metrics and service target status. |
 
 ## Full Tech Flow (How to Run)
@@ -311,6 +333,7 @@ order-processing-system/
 
 
 
+
 ## Makefile Targets
 
 | Command | Description |
@@ -326,4 +349,5 @@ order-processing-system/
 | `make jaeger` | Open Jaeger UI (`:16686`) |
 | `make prometheus`| Open Prometheus UI (`:9090`) |
 | `make grafana` | Open Grafana UI (`:3000`) |
+| `make envoy-admin` | Open Envoy Admin UI (`:9901`) |
 | `make kafka-ui` | Open Kafka UI (`:8080`) |
