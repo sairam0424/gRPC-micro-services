@@ -21,6 +21,10 @@ This system is composed of multiple microservices communicating via gRPC, adheri
     *   **Structure**: Uses the `src` layout with `pyproject.toml`.
     *   **Responsibility**: Manages product stock, implements **Event-Driven Caching** and a **Tier-2 Cuckoo Filter**.
     *   **Path**: `inventory-service/src/app/`
+24. **Analytics Pipeline (Apache Flink)**:
+    *   **Responsibility**: Real-time stream processing of Kafka events. Implements windowed aggregations for ClickHouse, search indexing for Elasticsearch, and feature store updates for DuckDB.
+    *   **Features**: RocksDB StateBackend, S3/Minio Checkpointing, Exactly-Once Semantics.
+    *   **Path**: `analytics-pipeline/src/`
 
 ## Repository Structure
 
@@ -119,6 +123,20 @@ flowchart TD
     
     %% Caching
     Inventory -->|Cache-Aside| Redis
+
+    subgraph "Analytics & ML Pipeline"
+        Flink[Apache Flink]
+        Minio[(Minio S3 State)]
+        CH[(ClickHouse OLAP)]
+        ES[(Elasticsearch Search)]
+        DuckDB[(DuckDB ML Store)]
+    end
+
+    Kafka -->|Events| Flink
+    Flink <-->|Checkpoint| Minio
+    Flink -->|Aggregates| CH
+    Flink -->|Indexes| ES
+    Flink -->|Features| DuckDB
 ```
 
 ## Resilience & High Availability
