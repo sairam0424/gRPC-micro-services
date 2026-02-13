@@ -146,6 +146,8 @@ services:
     build:
       context: ./inventory-service
       dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
     volumes:
       - ./inventory-service/src:/app/src
     env_file:
@@ -217,6 +219,8 @@ services:
       context: ./order-streamer
       dockerfile: Dockerfile
       target: builder
+    ports:
+      - "50053:50053"
     volumes:
       - ./order-streamer:/app
     environment:
@@ -245,6 +249,8 @@ services:
   web-client:
     build:
       context: ./web-client
+    ports:
+      - "3001:3000"
     volumes:
       - ./web-client:/app
       - /app/node_modules
@@ -276,7 +282,7 @@ services:
       - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "80:80"
-      - "8081:80" # Temporary port for Nginx if Envoy is on 80
+      - "8010:80" # Temporary port for Nginx if Envoy is on 80
     depends_on:
       - envoy
       - web-client
@@ -497,10 +503,156 @@ services:
     volumes:
       - ./infra/pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
       - ./infra/pgbouncer/userlist.txt:/etc/pgbouncer/userlist.txt:ro
+    networks:
+      - grpc-net
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgres://neondb_owner:npg_Fj6bG0DcStVr@haproxy:5432/neondb
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      MINIO_LICENSE: ${MINIO_LICENSE}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD-SHELL", "timeout 1s bash -c ':> /dev/tcp/127.0.0.1/9000' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  flink-jobmanager:
+    image: flink:1.18.1-java11
+    ports:
+      - "8081:8081"
+    command: jobmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        state.backend: rocksdb
+        state.checkpoints.dir: s3://flink-checkpoints/checkpoints
+        state.savepoints.dir: s3://flink-checkpoints/savepoints
+        s3.endpoint: ${MINIO_ENDPOINT}
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
+        s3.path.style.access: true
     depends_on:
-      - haproxy
+      - minio
+    networks:
+      - grpc-net
+
+  flink-taskmanager:
+    image: flink:1.18.1-java11
+    command: taskmanager
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 2
+        state.backend: rocksdb
+        state.checkpoints.dir: s3://flink-checkpoints/checkpoints
+        state.savepoints.dir: s3://flink-checkpoints/savepoints
+        s3.endpoint: ${MINIO_ENDPOINT}
+        s3.access-key: ${MINIO_ROOT_USER}
+        s3.secret-key: ${MINIO_ROOT_PASSWORD}
+        s3.path.style.access: true
+    depends_on:
+      - flink-jobmanager
+    networks:
+      - grpc-net
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"
+      - "9002:9000"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.1
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio-setup:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    env_file:
+      - .env
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc mb local/flink-checkpoints --ignore-existing;
+      mc mb local/ml-models --ignore-existing;
+      mc mb local/feature-store --ignore-existing;
+      mc mb local/raw-events --ignore-existing;
+      mc admin user add local $${FLINK_S3_ACCESS_KEY} $${FLINK_S3_SECRET_KEY} || true;
+      mc admin policy attach local readwrite --user $${FLINK_S3_ACCESS_KEY} || true;
+      mc license register local $${MINIO_LICENSE} || true;
+      exit 0;
+      "
+    networks:
+      - grpc-net
+
+  analytics-pipeline:
+    build:
+      context: ./analytics-pipeline
+      dockerfile: Dockerfile
+    volumes:
+      - ./analytics-pipeline/src:/app/src
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - FLINK_JOBMANAGER_HOST=flink-jobmanager
+      - CLICKHOUSE_HOST=clickhouse
+      - ELASTICSEARCH_HOST=elasticsearch
+      - S3_ENDPOINT=${MINIO_ENDPOINT}
+      - S3_ACCESS_KEY=${FLINK_S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${FLINK_S3_SECRET_KEY}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - CLICKHOUSE_CLOUD_HOST=${CLICKHOUSE_CLOUD_HOST}
+      - CLICKHOUSE_CLOUD_PORT=${CLICKHOUSE_CLOUD_PORT}
+      - CLICKHOUSE_CLOUD_USER=${CLICKHOUSE_CLOUD_USER}
+      - CLICKHOUSE_CLOUD_PASSWORD=${CLICKHOUSE_CLOUD_PASSWORD}
+      - ELASTICSEARCH_CLOUD_ENDPOINT=${ELASTICSEARCH_CLOUD_ENDPOINT}
+      - ELASTICSEARCH_CLOUD_API_KEY=${ELASTICSEARCH_CLOUD_API_KEY}
+    depends_on:
+      - kafka
+      - flink-jobmanager
+      - clickhouse
+      - minio-setup
+      - elasticsearch
+      - minio
     networks:
       - grpc-net
 
@@ -512,3 +664,6 @@ networks:
 volumes:
   inventory-data:
   etcd-data:
+  minio-data:
+  clickhouse-data:
+  elasticsearch-data:

@@ -101,6 +101,12 @@ prometheus:
 grafana:
 	open http://localhost:3000
 
+flink-ui:
+	open http://localhost:8081
+
+minio-ui:
+	open http://localhost:9001
+
 cdc-setup:
 	@echo "Setting up Debezium Postgres Connector..."
 	curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d @infra/debezium/postgres-connector.json
@@ -124,6 +130,19 @@ redis-insight:
 
 redis-commander:
 	open http://localhost:8082
+
+flink-ui:
+	open http://localhost:8081
+
+clickhouse-ui:
+	@echo "ClickHouse HTTP Interface: http://localhost:8123"
+	open http://localhost:8123/play
+
+minio-ui:
+	open http://localhost:9001
+
+es-health:
+	curl http://localhost:9200/_cluster/health?pretty
 
 help:
 	@echo "Usage: make [target]"
@@ -152,5 +171,9 @@ help:
 	@echo "  redis-commander - Open Redis Commander UI"
 	@echo "  envoy-admin   - Open Envoy Admin UI (Metrics & Cluster stats)"
 	@echo "  envoy-logs    - Follow Envoy proxy logs"
+	@echo "  flink-ui      - Open Flink UI"
+	@echo "  clickhouse-ui - Open ClickHouse UI"
+	@echo "  minio-ui      - Open MinIO UI"
+	@echo "  es-health     - Check Elasticsearch cluster health"
 
 .DEFAULT_GOAL := help
