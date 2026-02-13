@@ -27,8 +27,12 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Envoy Proxy**: High-performance L7 load balancer for gRPC and HTTP/2 traffic distribution using Least Connection + Consistent Hashing.
 - **Nginx Proxy**: Edge ingress routing for frontend and API traffic.
 - **Full Observability**: OpenTelemetry, Jaeger, Prometheus, Loki, and Grafana.
+- **Analytics Pipeline (Apache Flink)**: Real-time stream processing with **Exactly-Once Semantics**, **RocksDB StateBackend**, and **S3/Minio Checkpointing**.
+- **Columnar Analytics (ClickHouse)**: High-performance OLAP storage for BI dashboards and aggregation.
+- **Search Engine (Elasticsearch)**: Real-time search indexing for orders and products.
+- **ML Feature Store (DuckDB + Feast)**: Localized feature extraction and persistence for ML training and inference.
 - **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
-- **Admin Visibility**: Kafka UI, **RedisInsight**, and **Redis Commander**.
+- **Admin Visibility**: Kafka UI, **Flink UI**, **RedisInsight**, and **Redis Commander**.
 
 ## Architecture (Raft Cluster + Multi-Replica CDC)
 
@@ -66,6 +70,14 @@ flowchart TD
         Kafka[(Kafka)]
     end
 
+    subgraph "Analytics & Search Pipeline"
+        Flink[Apache Flink]
+        Minio[(Minio - S3 State)]
+        ClickHouse[(ClickHouse - BI)]
+        ES[(Elasticsearch - Search)]
+        DuckDB[(DuckDB - ML Features)]
+    end
+
     subgraph "Caching Tier"
         Redis[(Redis Stack)]
     end
@@ -95,6 +107,13 @@ flowchart TD
     Debezium -->|Events| Kafka
     Kafka -->|Async Rep| Inventory
     Inventory -->|Apply Changes| Replica2
+
+    %% Analytics Flow
+    Kafka -->|Stream| Flink
+    Flink <-->|State/Checkpoint| Minio
+    Flink -->|Sink| ClickHouse
+    Flink -->|Sink| ES
+    Flink -->|Sink| DuckDB
     
     %% Caching
     Inventory -->|Cache-Aside| Redis
