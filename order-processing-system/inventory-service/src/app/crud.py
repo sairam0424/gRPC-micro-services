@@ -1,10 +1,22 @@
 import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
-from .models import InventoryItem
+from .models import InventoryItem, ProcessedEvent
 from .bloom_filter import filter_manager
 
 logger = logging.getLogger(__name__)
+
+async def check_and_record_event(db: AsyncSession, event_id: str, service: str) -> bool:
+    """Check if event was processed, if not record it. Returns True if new, False if duplicate."""
+    result = await db.execute(
+        select(ProcessedEvent).where(ProcessedEvent.event_id == event_id)
+    )
+    if result.scalar():
+        return False
+    
+    db.add(ProcessedEvent(event_id=event_id, service=service))
+    # We don't commit here, caller should commit as part of the transaction
+    return True
 
 async def get_inventory_item(db: AsyncSession, product_id: str):
     result = await db.execute(

@@ -12,3 +12,10 @@ class InventoryItem(Base):
 
     def __repr__(self):
         return f"<InventoryItem(product_id='{self.product_id}', name='{self.name}', quantity={self.quantity})>"
+
+class ProcessedEvent(Base):
+    __tablename__ = "processed_events"
+
+    event_id = Column(String, primary_key=True, index=True)
+    processed_at = Column(DateTime(timezone=True), server_default=func.now())
+    service = Column(String, nullable=False)

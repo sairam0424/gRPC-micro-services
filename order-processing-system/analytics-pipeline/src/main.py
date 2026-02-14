@@ -148,6 +148,21 @@ def main():
         )
     """)
 
+    # 5. Dead Letter Queue Sink (Kafka)
+    t_env.execute_sql(f"""
+        CREATE TABLE analytics_dlq (
+            order_id STRING,
+            customer_id STRING,
+            event_type STRING,
+            error_message STRING
+        ) WITH (
+            'connector' = 'kafka',
+            'topic' = 'analytics.dlq',
+            'properties.bootstrap.servers' = '{kafka_brokers}',
+            'format' = 'json'
+        )
+    """)
+
     # --- Executing Pipeline via StatementSet for Unified Visibility ---
     statement_set = t_env.create_statement_set()
 
@@ -171,6 +186,15 @@ def main():
         INSERT INTO ml_features_sink
         SELECT customer_id, order_id, status, event_time
         FROM order_events
+        WHERE order_id IS NOT NULL AND customer_id IS NOT NULL
+    """)
+
+    # Add Dead Letter Queue Sink for invalid events
+    statement_set.add_insert_sql("""
+        INSERT INTO analytics_dlq
+        SELECT order_id, customer_id, event_type, 'Missing order_id or customer_id' as error_message
+        FROM order_events
+        WHERE order_id IS NULL OR customer_id IS NULL
     """)
 
     logger.info("Submitting unified Flink job: Order Analytics Pipeline")

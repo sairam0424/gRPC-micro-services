@@ -146,6 +146,24 @@ minio-ui:
 es-health:
 	curl http://localhost:9200/_cluster/health?pretty
 
+kafka-dlq-topics:
+	@echo "Creating DLQ topics..."
+	docker compose exec kafka kafka-topics --create --if-not-exists --topic inventory.dlq --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+	docker compose exec kafka kafka-topics --create --if-not-exists --topic order-streamer.dlq --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+	docker compose exec kafka kafka-topics --create --if-not-exists --topic analytics.dlq --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+
+replay-inventory:
+	@echo "Replaying inventory DLQ via API..."
+	curl -X POST http://localhost:8087/api/replay -H "Content-Type: application/json" -d '{"source": "inventory.dlq", "target": "order-events"}'
+
+replay-order-streamer:
+	@echo "Replaying order-streamer DLQ via API..."
+	curl -X POST http://localhost:8087/api/replay -H "Content-Type: application/json" -d '{"source": "order-streamer.dlq", "target": "order-events"}'
+
+replay-analytics:
+	@echo "Replaying analytics DLQ via API..."
+	curl -X POST http://localhost:8087/api/replay -H "Content-Type: application/json" -d '{"source": "analytics.dlq", "target": "order-events"}'
+
 help:
 	@echo "Usage: make [target]"
 	@echo ""
@@ -177,5 +195,9 @@ help:
 	@echo "  clickhouse-ui - Open ClickHouse UI"
 	@echo "  minio-ui      - Open MinIO UI"
 	@echo "  es-health     - Check Elasticsearch cluster health"
+	@echo "  kafka-dlq-topics - Create DLQ Kafka topics"
+	@echo "  replay-inventory      - Replay inventory DLQ events"
+	@echo "  replay-order-streamer - Replay order-streamer DLQ events"
+	@echo "  replay-analytics      - Replay analytics DLQ events"
 
 .DEFAULT_GOAL := help

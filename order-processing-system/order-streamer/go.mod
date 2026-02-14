@@ -3,6 +3,7 @@ module github.com/sairam0424/gRPC-micro-services/order-streamer
 go 1.24.0
 
 require (
+	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/segmentio/kafka-go v0.4.50
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.65.0
 	go.opentelemetry.io/otel v1.40.0
@@ -13,7 +14,6 @@ require (
 )
 
 require (
-	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
