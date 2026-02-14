@@ -29,21 +29,43 @@ class KafkaManager:
             bootstrap_servers=self.brokers,
             value_serializer=lambda v: json.dumps(v).encode('utf-8')
         )
-        await self.consumer.start()
-        await self.producer.start()
-        asyncio.create_task(self.consume_loop())
-        logger.info(f"Kafka Manager started on {self.brokers}")
+        
+        # Start connection in background to avoid blocking lifespan
+        asyncio.create_task(self._connect_and_run())
+        logger.info(f"Kafka Manager initialization started (background) for {self.brokers}")
+
+    async def _connect_and_run(self):
+        """Internal method to handle connection and the consume loop"""
+        try:
+            logger.info("Connecting to Kafka...")
+            await self.consumer.start()
+            await self.producer.start()
+            logger.info("Kafka consumer and producer started successfully")
+            await self.consume_loop()
+        except Exception as e:
+            logger.error(f"Failed to start Kafka: {e}")
+            # We don't crash the app, but health check will reflect disconnected state
 
     async def stop(self):
         self._stop_event.set()
         if self.consumer:
-            await self.consumer.stop()
+            try:
+                await self.consumer.stop()
+            except Exception:
+                pass
         if self.producer:
-            await self.producer.stop()
+            try:
+                await self.producer.stop()
+            except Exception:
+                pass
 
     def is_healthy(self) -> bool:
-        """Check if Kafka producer and consumer are running"""
-        return self.producer is not None and self.consumer is not None
+        """Check if Kafka producer and consumer are running and connected"""
+        # A simple check: if we have the objects and the producer sender task is running
+        return (self.producer is not None and 
+                self.consumer is not None and 
+                getattr(self.producer, '_sender', None) is not None and 
+                getattr(self.producer._sender, 'sender_task', None) is not None)
 
     async def consume_loop(self):
         try:
