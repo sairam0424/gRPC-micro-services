@@ -151,7 +151,9 @@ func main() {
 		subscribers: make(map[chan kafka.OrderEvent]struct{}),
 	}
 
-	consumer := kafka.NewConsumer([]string{kafkaBrokers}, "order-events", "order-streamer-group")
+	dlqProducer := kafka.NewProducer([]string{kafkaBrokers}, "order-streamer.dlq")
+	defer dlqProducer.Close()
+	consumer := kafka.NewConsumer([]string{kafkaBrokers}, "order-events", "order-streamer-group", dlqProducer)
 	go consumer.Start(context.Background())
 
 	// Route events from Kafka to the hub
