@@ -670,6 +670,30 @@ services:
     networks:
       - grpc-net
 
+  replay-service:
+    build:
+      context: ./infra/replay-service
+    ports:
+      - "8087:8000"
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - PORT=8000
+    depends_on:
+      - kafka
+    networks:
+      - grpc-net
+
+  dlq-ui:
+    build:
+      context: ./infra/dlq-ui
+    ports:
+      - "8086:8000"
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+    depends_on:
+      - kafka
+    networks:
+      - grpc-net
 
 networks:
   grpc-net:
