@@ -150,7 +150,7 @@ async def lifespan(app: FastAPI):
     # Raft Consensus Registration
     await consensus_manager.register_node()
     
-    app.state.kafka = KafkaManager(kafka_brokers, "order-events", "order-events")
+    app.state.kafka = KafkaManager(kafka_brokers, "order-events", "order-events", topic_dlq="inventory.dlq")
     await app.state.kafka.start()
     
     # Start gRPC server in the background
