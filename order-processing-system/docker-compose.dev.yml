@@ -7,6 +7,8 @@ services:
       target: builder
     volumes:
       - ./order-service:/app
+      - go-cache:/go/pkg/mod
+      - go-cache:/root/.cache/go-build
     ports:
       - "50051:50051"
     environment:
@@ -14,8 +16,7 @@ services:
       - KAFKA_BROKERS=kafka:29092
       - DATABASE_URL=${ORDER_DATABASE_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
-    # Overriding CMD to use air for hot-reloading
-    command: sh -c "go install github.com/air-verse/air@v1.61.1 && air -c .air.toml"
+    command: sh -c "air -c .air.toml"
     networks:
       - grpc-net
     healthcheck:
@@ -23,6 +24,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
     depends_on:
       inventory-service:
         condition: service_healthy
@@ -225,15 +227,18 @@ services:
       - "50053:50053"
     volumes:
       - ./order-streamer:/app
+      - go-cache:/go/pkg/mod
+      - go-cache:/root/.cache/go-build
     environment:
       - KAFKA_BROKERS=kafka:29092
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
-    command: sh -c "go install github.com/air-verse/air@v1.61.1 && air -c .air.toml"
+    command: sh -c "air -c .air.toml"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
     depends_on:
       kafka:
         condition: service_healthy
@@ -430,6 +435,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+      start_period: 60s
 
   redis-exporter:
     image: oliver006/redis_exporter:latest
@@ -675,3 +681,4 @@ volumes:
   minio-data:
   clickhouse-data:
   elasticsearch-data:
+  go-cache:
