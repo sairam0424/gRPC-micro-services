@@ -187,7 +187,7 @@ async def health():
             "kafka": "unknown"
         }
     }
-    overall_status = True
+    overall_status = "healthy"
 
     # Check Database
     try:
@@ -197,7 +197,7 @@ async def health():
     except Exception as e:
         logger.error(f"DB Health check failed: {e}")
         health_status["checks"]["database"] = f"failed: {str(e)}"
-        overall_status = False
+        overall_status = "unhealthy"
 
     # Check Redis
     try:
@@ -206,17 +206,24 @@ async def health():
     except Exception as e:
         logger.error(f"Redis Health check failed: {e}")
         health_status["checks"]["redis"] = f"failed: {str(e)}"
-        overall_status = False
+        overall_status = "unhealthy"
 
     # Check Kafka
-    if hasattr(app.state, "kafka") and app.state.kafka.is_healthy():
-        health_status["checks"]["kafka"] = "connected"
+    if hasattr(app.state, "kafka"):
+        if app.state.kafka.is_healthy():
+            health_status["checks"]["kafka"] = "connected"
+        else:
+            health_status["checks"]["kafka"] = "connecting"
+            # Don't mark as unhealthy yet if it's just connecting during startup
+            if overall_status == "healthy":
+                overall_status = "starting"
     else:
-        health_status["checks"]["kafka"] = "disconnected"
-        overall_status = False
+        health_status["checks"]["kafka"] = "not_initialized"
+        overall_status = "unhealthy"
 
-    if not overall_status:
-        health_status["status"] = "unhealthy"
+    health_status["status"] = overall_status
+    
+    if overall_status == "unhealthy":
         raise HTTPException(status_code=503, detail=health_status)
     
     return health_status
