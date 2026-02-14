@@ -13,6 +13,7 @@
     "plugin.name": "pgoutput",
     "table.include.list": "public.inventory",
     "topic.prefix": "inventory_cdc",
-    "slot.name": "inventory_debezium_slot"
+    "slot.name": "inventory_debezium_slot",
+    "publication.name": "dbz_publication"
   }
 }

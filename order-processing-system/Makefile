@@ -109,8 +109,9 @@ grafana:
 # 	open http://localhost:9001
 
 cdc-setup:
-	@echo "Setting up Debezium Postgres Connector..."
+	@echo "Setting up Debezium Postgres Connectors..."
 	curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d @infra/debezium/postgres-connector.json
+	curl -i -X POST -H "Accept:application/json" -H "Content-Type:application/json" localhost:8083/connectors/ -d @infra/debezium/order-outbox-connector.json
 
 loki:
 	@echo "Loki logs are best viewed in Grafana (http://localhost:3000)"
