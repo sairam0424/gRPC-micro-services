@@ -2,7 +2,8 @@
 FROM golang:1.24-alpine AS builder
 
 # Install build tools
-RUN apk add --no-cache git
+RUN apk add --no-cache git && \
+    go install github.com/air-verse/air@v1.61.1
 
 WORKDIR /app
 
