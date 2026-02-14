@@ -305,9 +305,9 @@ services:
       - grpc-net
 
   jaeger:
-    image: jaegertracing/all-in-one:latest
+    image: jaegertracing/jaeger:2.2.0
     ports:
-      - "16686:16686"
+      - "16686:16686" # UI
     networks:
       - grpc-net
 
@@ -353,8 +353,8 @@ services:
     volumes:
       - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4317:4317" # OTLP gRPC receiver
-      - "4318:4318" # OTLP HTTP receiver
+      - "4319:4317" # OTLP gRPC receiver (Remapped to avoid host conflict)
+      - "4320:4318" # OTLP HTTP receiver (Remapped to avoid host conflict)
       - "8889:8889" # Prometheus exporter
       - "13133:13133" # Health check
     networks:
@@ -366,23 +366,22 @@ services:
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
-    command: /etc/confluent/docker/run
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
     networks:
       - grpc-net
     healthcheck:
-      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
-    command: /etc/confluent/docker/run
     depends_on:
-      - zookeeper
+      zookeeper:
+        condition: service_healthy
     ports:
       - "9094:9092"
     environment:
@@ -395,8 +394,7 @@ services:
     networks:
       - grpc-net
     healthcheck:
-      # Use kafka-broker-api-versions to check if the broker is up on the internal port
-      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:29092 || exit 1"]
+      test: ["CMD-SHELL", "nc -z localhost 29092 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
