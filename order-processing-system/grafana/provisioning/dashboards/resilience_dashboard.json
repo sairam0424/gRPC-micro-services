@@ -347,6 +347,150 @@
       ],
       "title": "Load Shedding events",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "envoy_cluster_upstream_cx_active{cluster_name=\"gateway_service\"}",
+          "legendFormat": "Active Connections",
+          "refId": "A"
+        },
+        {
+          "expr": "envoy_cluster_upstream_rq_pending_active{cluster_name=\"gateway_service\"}",
+          "legendFormat": "Pending Requests",
+          "refId": "B"
+        }
+      ],
+      "title": "Envoy: Active Traffic (Gateway Cluster)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "orange"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "rate(envoy_cluster_upstream_rq_pending_overflow{cluster_name=\"gateway_service\"}[1m])",
+          "legendFormat": "CB Pending Overflow",
+          "refId": "A"
+        }
+      ],
+      "title": "Envoy: Circuit Breaker Triggers",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "red"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "lineWidth": 2
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 24
+      },
+      "id": 6,
+      "targets": [
+        {
+          "expr": "envoy_cluster_outlier_detection_ejections_active{cluster_name=\"gateway_service\"}",
+          "legendFormat": "Active Ejections",
+          "refId": "A"
+        }
+      ],
+      "title": "Envoy: Outlier Detection Ejections",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2
+          }
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 24
+      },
+      "id": 7,
+      "targets": [
+        {
+          "expr": "rate(envoy_cluster_upstream_rq_retry{cluster_name=\"gateway_service\"}[1m])",
+          "legendFormat": "Retries/sec",
+          "refId": "A"
+        }
+      ],
+      "title": "Envoy: Retry Activity",
+      "type": "timeseries"
     }
   ],
   "refresh": "1s",

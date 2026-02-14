@@ -9,6 +9,7 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **API Gateways (FastAPI)**: Distributed cluster (Multi-replica) for high availability and horizontal scaling.
 - **Rate Limiting**: Distributed Token Bucket using Redis.
 - **Load Shedding**: Graceful degradation under stress.
+- **Envoy Ingress Resilience**: Advanced circuit breaking, outlier detection, and retry budgets at the edge.
 - **Tier-1 Bloom Filter** for catalog existence pre-filtering.
 - **Order Service (Go)** persists orders and publishes events to Kafka.
 - **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL, now with a **Tier-2 Cuckoo Filter** for fast in-stock checks and a **high-performance Redis Cache (Cache-Aside)** with request coalescing and jitter.

@@ -5,7 +5,7 @@ import time
 import concurrent.futures
 from datetime import datetime
 
-GATEWAY_URL = "http://localhost:8100"
+GATEWAY_URL = "http://localhost:8085"
 
 def make_request(path, method="GET", headers=None, data=None):
     url = f"{GATEWAY_URL}{path}"
