@@ -1,34 +1,54 @@
+# Build stage for connectors
+FROM alpine:3.19 AS connector-builder
+
+RUN apk add --no-cache wget
+
+WORKDIR /opt/flink/lib
+
+# Download Flink S3 and Kafka connectors in parallel
+RUN wget https://repo.maven.apache.org/maven2/org/apache/flink/flink-s3-fs-hadoop/1.18.1/flink-s3-fs-hadoop-1.18.1.jar && \
+    wget https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.0.1-1.18/flink-sql-connector-kafka-3.0.1-1.18.jar && \
+    wget https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-jdbc/3.1.2-1.18/flink-connector-jdbc-3.1.2-1.18.jar && \
+    wget https://repo1.maven.org/maven2/com/clickhouse/flink/flink-connector-clickhouse-1.17/0.1.3/flink-connector-clickhouse-1.17-0.1.3-all.jar && \
+    wget https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-elasticsearch7/3.0.1-1.17/flink-sql-connector-elasticsearch7-3.0.1-1.17.jar
+
+# Final stage
 FROM flink:1.18.1-java11
 
-# Install python3 and pip
-RUN apt-get update && apt-get install -y \
+# Install uv for lightning fast builds
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Install python3 and build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-dev \
-    openjdk-11-jdk \
+    openjdk-11-jdk-headless \
+    gcc \
+    g++ \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Set JAVA_HOME (required for pemja)
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
-# Note: For x86 it might be /usr/lib/jvm/java-11-openjdk-amd64
-# To be safe, we can use a glob or find it dynamically, but usually arm64 is what user is on (mac m1/m2)
+# Fix JAVA_HOME for pemja/pyflink build (works for both amd64 and arm64)
+RUN ln -s /usr/lib/jvm/java-11-openjdk-$(dpkg --print-architecture) /usr/lib/jvm/java-11-openjdk
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk
 
 # Set python3 as default python
-RUN ln -s /usr/bin/python3 /usr/bin/python
+RUN ln -sf /usr/bin/python3 /usr/bin/python
 
-# Install PyFlink and other dependencies
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir -r requirements.txt
+# Copy connectors from builder stage
+COPY --from=connector-builder /opt/flink/lib/*.jar /opt/flink/lib/
 
-# Download Flink S3 and Kafka connectors
-RUN wget -P /opt/flink/lib https://repo.maven.apache.org/maven2/org/apache/flink/flink-s3-fs-hadoop/1.18.1/flink-s3-fs-hadoop-1.18.1.jar
-RUN wget -P /opt/flink/lib https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-kafka/3.0.1-1.18/flink-sql-connector-kafka-3.0.1-1.18.jar
-RUN wget -P /opt/flink/lib https://repo.maven.apache.org/maven2/org/apache/flink/flink-connector-jdbc/3.1.2-1.18/flink-connector-jdbc-3.1.2-1.18.jar
-RUN wget -P /opt/flink/lib https://repo1.maven.org/maven2/com/clickhouse/flink/flink-connector-clickhouse-1.17/0.1.3/flink-connector-clickhouse-1.17-0.1.3-all.jar
-RUN wget -P /opt/flink/lib https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-elasticsearch7/3.0.1-1.17/flink-sql-connector-elasticsearch7-3.0.1-1.17.jar
+# Install dependencies into a virtualenv using uv
+RUN uv venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
+COPY requirements.txt .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install -r requirements.txt
+
 COPY src/ /app/src/
 
-# Command to run the Flink job (this will be handled by JobManager, but we can put a placeholder)
+# Command to run the Flink job
 CMD ["python", "src/main.py"]
