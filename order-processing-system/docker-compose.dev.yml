@@ -618,7 +618,15 @@ services:
       mc mb local/raw-events --ignore-existing;
       mc admin user add local $${FLINK_S3_ACCESS_KEY} $${FLINK_S3_SECRET_KEY} || true;
       mc admin policy attach local readwrite --user $${FLINK_S3_ACCESS_KEY} || true;
-      mc license register local $${MINIO_LICENSE} || true;
+      case \"$${MINIO_LICENSE}\" in
+        *MTE5MTE5*|\"\")
+          echo \"Skipping MinIO license registration (placeholder or empty license detected)\"
+          ;;
+        *)
+          echo \"$${MINIO_LICENSE}\" > /tmp/minio.license;
+          mc license register local --license /tmp/minio.license || true
+          ;;
+      esac;
       exit 0;
       "
     networks:

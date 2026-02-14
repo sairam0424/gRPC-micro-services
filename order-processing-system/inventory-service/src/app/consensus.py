@@ -21,30 +21,37 @@ class RaftConsensusManager:
         self._stop_event = asyncio.Event()
 
     async def register_node(self):
-        """Register node in etcd and start heartbeat"""
-        try:
-            # Wrap in a small timeout to avoid hanging the lifespan
-            self.lease = self.etcd.lease(self.lease_ttl)
-            # Register node metrics
-            await self.update_metrics()
-            # Start heartbeat task
-            asyncio.create_task(self.heartbeat_loop())
-            # Start leader election task
-            asyncio.create_task(self.election_loop())
-        except Exception as e:
-            logger.error(f"Failed to register node with etcd: {e}")
-            # We don't want to crash the whole app if etcd is just starting up
-            # but we won't have leader election or node status in the dashboard
+        """Register node in etcd and start tasks"""
+        logger.info(f"Registering node {self.node_id} with etcd at {self.host}:{self.port}")
+        # Start heartbeat and election as background tasks
+        asyncio.create_task(self.heartbeat_loop())
+        asyncio.create_task(self.election_loop())
 
     async def heartbeat_loop(self):
         while not self._stop_event.is_set():
             try:
+                if self.lease is None:
+                    try:
+                        # Attempt to create lease
+                        self.lease = self.etcd.lease(self.lease_ttl)
+                        logger.info(f"Etcd lease created for node {self.node_id}")
+                    except Exception as e:
+                        logger.warning(f"Failed to create etcd lease: {e}")
+                        await asyncio.sleep(5)
+                        continue
+
                 self.lease.refresh()
-                await self.update_metrics()
-                await asyncio.sleep(self.lease_ttl / 2)
+                # Update metrics in background
+                try:
+                    await self.update_metrics()
+                except Exception as e:
+                    logger.warning(f"Failed to update metrics in etcd: {e}")
+                
+                await asyncio.sleep(self.lease_ttl / 4) # Refresh more frequently
             except Exception as e:
-                logger.error(f"Heartbeat error: {e}")
-                await asyncio.sleep(1)
+                logger.error(f"Heartbeat loop error: {e}")
+                self.lease = None # Reset lease to trigger recreation
+                await asyncio.sleep(5)
 
     async def update_metrics(self):
         """Update CPU and connection count in etcd"""
