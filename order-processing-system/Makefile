@@ -66,7 +66,8 @@ up:
 	docker compose up --build -d
 
 up-dev:
-# 	docker compose -f docker-compose.dev.yml up --build -d
+# 	docker compose -f docker-compose.dev.yml build --parallel
+# 	docker compose -f docker-compose.dev.yml up
 	docker compose -f docker-compose.dev.yml up --build
 
 restart:
