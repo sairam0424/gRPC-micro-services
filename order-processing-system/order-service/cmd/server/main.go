@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -64,49 +65,72 @@ func (s *server) CreateOrder(ctx context.Context, req *pb.CreateOrderRequest) (*
 	// Generate Order ID
 	orderID := fmt.Sprintf("ORD-%d", time.Now().UnixNano())
 
-	// Save to DB
-	dbOrder := models.Order{
-		OrderID:    orderID,
-		CustomerID: req.CustomerId,
-		Status:     "PENDING",
-	}
+	// Use Transaction for Outbox Pattern
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		// 1. Create Order
+		dbOrder := models.Order{
+			OrderID:    orderID,
+			CustomerID: req.CustomerId,
+			Status:     "PENDING",
+		}
 
-	for _, item := range req.Items {
-		dbOrder.Items = append(dbOrder.Items, models.OrderItem{
-			OrderID:   orderID,
-			ProductID: item.ProductId,
-			Quantity:  item.Quantity,
-			Price:     item.Price,
-		})
-	}
+		for _, item := range req.Items {
+			dbOrder.Items = append(dbOrder.Items, models.OrderItem{
+				OrderID:   orderID,
+				ProductID: item.ProductId,
+				Quantity:  item.Quantity,
+				Price:     item.Price,
+			})
+		}
 
-	if err := database.DB.Create(&dbOrder).Error; err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to save order: %v", err)
-	}
+		if err := tx.Create(&dbOrder).Error; err != nil {
+			return err
+		}
 
-	var eventItems []kafka.OrderItem
-	for _, item := range req.Items {
-		eventItems = append(eventItems, kafka.OrderItem{
-			ProductID: item.ProductId,
-			Quantity:  item.Quantity,
-			Price:     item.Price,
-		})
-	}
+		// 2. Create Outbox Record
+		eventItems := make([]kafka.OrderItem, 0, len(req.Items))
+		for _, item := range req.Items {
+			eventItems = append(eventItems, kafka.OrderItem{
+				ProductID: item.ProductId,
+				Quantity:  item.Quantity,
+				Price:     item.Price,
+			})
+		}
 
-	// 3. Publish order.created event
-	err := s.kafkaProducer.PublishOrderEvent(context.Background(), kafka.OrderEvent{
-		EventType:  "order.created",
-		OrderID:    orderID,
-		CustomerID: req.CustomerId,
-		Status:     "PENDING",
-		Message:    "Order created and awaiting processing",
-		Items:      eventItems,
+		event := kafka.OrderEvent{
+			EventType:  "order.created",
+			OrderID:    orderID,
+			CustomerID: req.CustomerId,
+			Status:     "PENDING",
+			Message:    "Order created and awaiting processing",
+			Items:      eventItems,
+		}
+
+		payload, err := json.Marshal(event)
+		if err != nil {
+			return err
+		}
+
+		outbox := models.Outbox{
+			AggregateType: "Order",
+			AggregateID:   orderID,
+			EventType:     "order.created",
+			Payload:       string(payload),
+			CreatedAt:     time.Now(),
+		}
+
+		if err := tx.Create(&outbox).Error; err != nil {
+			return err
+		}
+
+		return nil
 	})
+
 	if err != nil {
-		log.Printf("Non-critical error publishing order.created event: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to create order and outbox: %v", err)
 	}
 
-	log.Printf("Created order: %s for customer: %s", orderID, req.CustomerId)
+	log.Printf("Created order: %s and outbox record for customer: %s", orderID, req.CustomerId)
 	return &pb.CreateOrderResponse{
 		OrderId: orderID,
 		Status:  pb.OrderStatus_ORDER_STATUS_PENDING,
