@@ -52,7 +52,36 @@ The Load Shedder can be triggered by:
 | > 0.8 (High) | Reject all non-critical requests. |
 
 ### Response
+
 Returns `503 Service Unavailable` with a descriptive message.
+
+---
+
+## Ingress Resilience (Envoy Proxy)
+
+Envoy acts as the Tier-0 entry point and implements advanced resilience patterns before traffic reaches the API Gateways.
+
+### Circuit Breaker Thresholds
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `max_connections` | 512 | Maximum concurrent connections to the gateway cluster. |
+| `max_pending_requests` | 512 | Maximum requests queued waiting for a connection. |
+| `max_requests` | 512 | Maximum concurrent active requests. |
+| `max_retries` | 3 | Maximum concurrent retries allowed. |
+
+### Outlier Detection (Passive Health Checking)
+
+Envoy monitors the health of upstream hosts (API Gateways) and ejects them if they fail:
+
+- **Trigger**: 5 consecutive `5xx` errors.
+- **Interval**: 30 seconds.
+- **Ejection Time**: 30 seconds (base).
+- **Max Ejection**: 50% of the cluster can be ejected at once.
+
+### Retry Budgets
+
+To prevent cascading failures caused by retries, Envoy limits retries to **20%** of the total traffic, ensuring that retries don't overwhelm failing backends.
 
 ---
 
