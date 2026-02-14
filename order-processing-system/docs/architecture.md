@@ -3,6 +3,35 @@
 ## Overview
 This system is composed of multiple microservices communicating via gRPC, adhering to industry standard repository structures.
 
+# Roles :
+
+### Ingress Layer (Envoy Proxy)
+
+* Role: Edge proxy and service mesh gateway.
+* Responsibilities:
+  * TLS termination.
+  * Load balancing.
+  * Ingress resilience (circuit breaking, retries, timeouts).
+  * Request logging and observability.
+
+### API Gateway
+
+* Role: Primary entry point for internal service communication.
+* Responsibilities:
+  * Authentication and authorization.
+  * Request routing.
+  * Rate limiting.
+  * Request/response transformation.
+
+### Orders Service
+
+* Role: Core business logic for order management.
+* Responsibilities:
+  * Order creation and status tracking.
+  * Inventory validation (via Inventory Service).
+  * Payment processing (via Payment Service).
+  * Asynchronous order processing (via message queue).
+
 ### Components
 
 1.  **Envoy Proxy**:
