@@ -101,11 +101,11 @@ prometheus:
 grafana:
 	open http://localhost:3000
 
-flink-ui:
-	open http://localhost:8081
+# flink-ui:
+# 	open http://localhost:8081
 
-minio-ui:
-	open http://localhost:9001
+# minio-ui:
+# 	open http://localhost:9001
 
 cdc-setup:
 	@echo "Setting up Debezium Postgres Connector..."
