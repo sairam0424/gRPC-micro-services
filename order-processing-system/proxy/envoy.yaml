@@ -21,10 +21,11 @@ static_resources:
                         - match: { prefix: "/" }
                           route:
                             cluster: gateway_service
-                            timeout: 0s
+                            timeout: 15s
                             retry_policy:
                               retry_on: "5xx,connect-failure,refused-stream"
                               num_retries: 3
+                              per_try_timeout: 5s
                               retry_back_off:
                                 base_interval: 0.25s
                                 max_interval: 5s
@@ -59,13 +60,22 @@ static_resources:
           healthy_threshold: 2
           http_health_check:
             path: "/health"
+      outlier_detection:
+        consecutive_5xx: 5
+        interval: 30s
+        base_ejection_time: 30s
+        max_ejection_percent: 50
       circuit_breakers:
         thresholds:
           - priority: DEFAULT
-            max_connections: 1024
-            max_pending_requests: 1024
-            max_requests: 1024
+            max_connections: 512
+            max_pending_requests: 512
+            max_requests: 512
             max_retries: 3
+            retry_budget:
+              budget_percent:
+                value: 20.0
+              min_retry_concurrency: 10
 
 admin:
   access_log_path: "/dev/null"
