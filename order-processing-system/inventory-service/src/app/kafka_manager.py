@@ -1,6 +1,7 @@
 import json
 import logging
 import asyncio
+import backoff
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 from . import crud
 from .database import writer_session, reader_sessions
@@ -10,10 +11,11 @@ from .cache import cache_manager
 logger = logging.getLogger(__name__)
 
 class KafkaManager:
-    def __init__(self, brokers, topic_in, topic_out):
+    def __init__(self, brokers, topic_in, topic_out, topic_dlq=None):
         self.brokers = brokers
         self.topic_in = topic_in
         self.topic_out = topic_out
+        self.topic_dlq = topic_dlq or f"{topic_in}.dlq"
         self.consumer = None
         self.producer = None
         self._stop_event = asyncio.Event()
@@ -67,6 +69,20 @@ class KafkaManager:
                 getattr(self.producer, '_sender', None) is not None and 
                 getattr(self.producer._sender, 'sender_task', None) is not None)
 
+    async def publish_to_dlq(self, event, error):
+        """Publish failed events to the Dead Letter Queue"""
+        dlq_event = {
+            "original_event": event,
+            "error": str(error),
+            "service": "inventory-service",
+            "retry_exhausted": True
+        }
+        try:
+            await self.producer.send_and_wait(self.topic_dlq, dlq_event)
+            logger.warning(f"Message sent to DLQ {self.topic_dlq}: {event.get('order_id')}")
+        except Exception as e:
+            logger.error(f"Failed to publish to DLQ: {e}")
+
     async def consume_loop(self):
         try:
             async for msg in self.consumer:
@@ -76,10 +92,24 @@ class KafkaManager:
                 event = msg.value
                 logger.info(f"Received event: {event.get('event_type')} for order {event.get('order_id')}")
                 
-                if event.get("event_type") == "order.created":
-                    await self.handle_order_created(event)
-                elif event.get("event_type") == "inventory.updated":
-                    await self.handle_inventory_updated(event)
+                # Use backoff to retry message processing
+                @backoff.on_exception(
+                    backoff.expo,
+                    (Exception),
+                    max_tries=3,
+                    on_giveup=lambda details: asyncio.create_task(self.publish_to_dlq(event, details['exception']))
+                )
+                async def process_with_retry():
+                    if event.get("event_type") == "order.created":
+                        await self.handle_order_created(event)
+                    elif event.get("event_type") == "inventory.updated":
+                        await self.handle_inventory_updated(event)
+
+                try:
+                    await process_with_retry()
+                except Exception as e:
+                    logger.error(f"Processing failed after retries: {e}")
+
         except Exception as e:
             logger.error(f"Error in Kafka consume loop: {e}")
 
@@ -127,8 +157,14 @@ class KafkaManager:
                 return
 
         async with writer_session() as session:
+            # Idempotency Check
+            event_id = event.get("event_id") or f"order_{order_id}"
+            if not await crud.check_and_record_event(session, event_id, "inventory-service"):
+                logger.info(f"Duplicate event ignored: {event_id}")
+                return
+
             try:
-                success, message = await crud.reserve_stock_atomic(session, order_id, req_items)
+                success, message, response_items = await crud.reserve_stock_atomic(session, order_id, req_items)
                 
                 response_event = {
                     "event_type": "inventory.reserved" if success else "inventory.failed",
@@ -150,10 +186,16 @@ class KafkaManager:
         """
         Golden Rule: Refresh cache via events.
         Ensures consistency across all instances.
-        
-        NEW: Also implement async replication for Multi-Replica Setup.
-        We apply the change to Replica 2 asynchronously via Kafka CDC.
         """
+        event_id = event.get("event_id") or f"inv_upd_{event.get('product_id')}_{event.get('quantity')}"
+        
+        async with writer_session() as session:
+            if not await crud.check_and_record_event(session, event_id, "inventory-service"):
+                logger.info(f"Duplicate inventory update ignored: {event_id}")
+                return
+            await session.commit() # Commit the idempotency record early for cache/bloom sync if needed, 
+                                   # although typically we'd do it as part of a larger transaction.
+
         product_id = event.get("product_id")
         quantity = event.get("quantity")
         if product_id is not None and quantity is not None:

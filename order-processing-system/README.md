@@ -32,9 +32,9 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Columnar Analytics (ClickHouse)**: High-performance OLAP storage for BI dashboards and aggregation.
 - **Search Engine (Elasticsearch)**: Real-time search indexing for orders and products.
 - **ML Feature Store (DuckDB + Feast)**: Localized feature extraction and persistence for ML training and inference.
+- **Resilience Strategy (DLQ & Replay)**: Implementation of Dead Letter Queues with exponential backoff and idempotent replay for all core services.
+- **Admin Visibility**: Kafka UI, **Flink UI**, **DLQ Monitor**, **RedisInsight**, and **Redis Commander**.
 - **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
-- **Admin Visibility**: Kafka UI, **Flink UI**, **RedisInsight**, and **Redis Commander**.
-
 ## Architecture (Raft Cluster + Multi-Replica CDC)
 
 ```mermaid
@@ -139,27 +139,34 @@ The system features a sophisticated database architecture designed for scaling a
 
 To get the full Leader-Replica + CDC flow running with Neon:
 
-1.  **Enable Logical Replication**:
-    - Go to your **Neon Console**.
-    - Navigate to **Settings** -> **Database Configuration**.
-    - Set `wal_level` to `logical`. (Note: This is required for Debezium to read the WAL).
-2.  **Configure Environment**:
-    Ensure your `.env` file has both the leader and replica strings:
-    ```env
-    DATABASE_URL=postgresql+asyncpg://... (Leader)
-    REPLICA_DATABASE_URL=postgresql+asyncpg://... (Replica)
-    ```
-3.  **Start the Infrastructure**:
-    ```bash
-    make up-dev
-    ```
-4.  **Register the CDC Connector**:
-    Run the following command to POST the connector configuration to the Debezium service:
-    ```bash
-    make cdc-setup
-    ```
-5.  **Verify**:
-    Open the **Kafka UI** (`http://localhost:8080`) to see the CDC events flowing into the `inventory_cdc` topics.
+1. **Enable Logical Replication**:
+   - Go to your **Neon Console**.
+   - Navigate to **Settings** -> **Database Configuration**.
+   - Set `wal_level` to `logical`. (Note: This is required for Debezium to read the WAL).
+
+2. **Configure Environment**:
+   Ensure your `.env` file has both the leader and replica strings:
+
+   ```env
+   DATABASE_URL=postgresql+asyncpg://... (Leader)
+   REPLICA_DATABASE_URL=postgresql+asyncpg://... (Replica)
+   ```
+
+3. **Start the Infrastructure**:
+
+   ```bash
+   make up-dev
+   ```
+
+4. **Register the CDC Connector**:
+   Run the following command to POST the connector configuration to the Debezium service:
+
+   ```bash
+   make cdc-setup
+   ```
+
+5. **Verify**:
+   Open the **Kafka UI** (`http://localhost:8080`) to see the CDC events flowing into the `inventory_cdc` topics.
 
 ## Services and Ports
 
@@ -197,6 +204,16 @@ curl -X POST http://localhost/api/orders \
   -d '{"customer_id":"CUST-001","items":[{"product_id":"PROD-001","quantity":1,"price":100.0}]}'
 ```
 
+## Resilience Strategy (DLQ & Replay)
+
+The system implements a robust recovery mechanism for failed events using Dead Letter Queues and an Idempotent Replay strategy.
+
+- **Exponential Backoff**: Services retry failed Kafka processing with increasing delays (max 3 retries).
+- **Dead Letter Queues (DLQ)**: Events that fail all retries are published to specific DLQ topics (`service.dlq`) with full error metadata.
+- **Idempotency**: All consumers implement idempotency (DB-backed for inventory, in-memory for streamer) to safely handle replayed events.
+- **Replay Mechanism**: A dedicated `replay-service` can republish events from DLQ topics back to the main processing path.
+- **DLQ Monitor**: A visual dashboard to inspect trapped events and errors.
+
 ## Observability & Monitoring
 
 The system is equipped with a full observability stack:
@@ -226,6 +243,7 @@ The system utilizes a high-performance caching layer in the `inventory-service` 
 | **RedisInsight** | `http://localhost:8003` | Native Redis UI for memory analysis and profiling. |
 | **Redis Commander** | `http://localhost:8081` | Web-based Redis key management. |
 | **Kafka UI** | `http://localhost:8080` | Monitor topics and `inventory.updated` events. |
+| **DLQ Monitor** | `http://localhost:8086` | View events in Dead Letter Queues. |
 | **Envoy Admin** | `http://localhost:9901` | Traffic distribution metrics & cluster health. |
 | **Prometheus** | `http://localhost:9090` | Raw metrics and service target status. |
 
@@ -371,3 +389,6 @@ order-processing-system/
 | `make grafana` | Open Grafana UI (`:3000`) |
 | `make envoy-admin` | Open Envoy Admin UI (`:9901`) |
 | `make kafka-ui` | Open Kafka UI (`:8080`) |
+| `make dlq-ui` | Open DLQ Monitor UI (`:8085/dlq`) |
+| `make kafka-dlq-topics` | Create necessary Kafka DLQ topics |
+| `make replay-inventory` | Replay events from inventory DLQ |
