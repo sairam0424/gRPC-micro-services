@@ -37,24 +37,30 @@ def setup_minio():
     access_key = os.getenv("MINIO_ROOT_USER", "admin")
     secret_key = os.getenv("MINIO_ROOT_PASSWORD", "strongpassword123")
     
-    logger.info(f"Connecting to MinIO at {endpoint} as ROOT to ensure buckets exist...")
-    s3 = boto3.client(
-        's3',
-        endpoint_url=endpoint,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        config=Config(signature_version='s3v4'),
-        region_name='us-east-1'
-    )
-    
-    buckets = ['flink-checkpoints', 'ml-models', 'feature-store', 'raw-events']
-    for bucket in buckets:
-        try:
-            s3.head_bucket(Bucket=bucket)
-            logger.info(f"Bucket '{bucket}' already exists.")
-        except:
-            logger.info(f"Creating bucket '{bucket}'...")
-            s3.create_bucket(Bucket=bucket)
+    logger.info(f"Connecting to MinIO at {endpoint} as ROOT to ensure buckets exist (Timeout: 10s)...")
+    try:
+        s3 = boto3.client(
+            's3',
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=Config(signature_version='s3v4', connect_timeout=10, retries={'max_attempts': 2}),
+            region_name='us-east-1'
+        )
+        
+        buckets = ['flink-checkpoints', 'ml-models', 'feature-store', 'raw-events']
+        for bucket in buckets:
+            try:
+                s3.head_bucket(Bucket=bucket)
+                logger.info(f"Bucket '{bucket}' already exists.")
+            except Exception as e:
+                logger.info(f"Creating bucket '{bucket}' because head_bucket failed: {e}")
+                try:
+                    s3.create_bucket(Bucket=bucket)
+                except Exception as create_err:
+                    logger.error(f"Failed to create bucket {bucket}: {create_err}")
+    except Exception as e:
+        logger.error(f"Could not connect to MinIO during startup: {e}. Flink checkpointing might fail if buckets are missing.")
 
 def main():
     logger.info("Starting High-Performance Analytics Pipeline...")

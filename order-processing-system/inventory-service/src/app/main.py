@@ -2,7 +2,11 @@ import asyncio
 import logging
 import os
 import sys
-import logging
+
+# Add src directory to PYTHONPATH
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import threading
 from opentelemetry import trace, metrics, _logs
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -28,11 +32,11 @@ GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
 sys.path.append(GENERATED_DIR)
 
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
-from .database import init_db, get_db, writer_session, reader_sessions
-from .models import InventoryItem
-from .bloom_filter import filter_manager
-from .cache import cache_manager
-from .consensus import consensus_manager
+from app.database import init_db, get_db, writer_session, reader_sessions
+from app.models import InventoryItem
+from app.bloom_filter import filter_manager
+from app.cache import cache_manager
+from app.consensus import consensus_manager
 
 from contextlib import asynccontextmanager
 
@@ -146,26 +150,44 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(periodic_sync())
     
     kafka_brokers = os.getenv("KAFKA_BROKERS", "kafka:29092")
+    schema_registry_url = os.getenv("SCHEMA_REGISTRY_URL", "http://schema-registry:8081")
     
     # Raft Consensus Registration
     await consensus_manager.register_node()
     
-    app.state.kafka = KafkaManager(kafka_brokers, "order-events", "order-events", topic_dlq="inventory.dlq")
-    await app.state.kafka.start()
+    app.state.kafka = KafkaManager(
+        kafka_brokers, 
+        "order-events", 
+        "inventory-events",
+        schema_registry_url,
+        topic_dlq="inventory.dlq"
+    )
+    # Start Kafka consumer in a background thread (it's a blocking synchronous loop)
+    kafka_thread = threading.Thread(target=app.state.kafka.start, daemon=True)
+    kafka_thread.start()
+    logger.info("Kafka Manager consumer started in background thread")
     
-    # Start gRPC server in the background
-    server = grpc.aio.server()
-    inventory_pb2_grpc.add_InventoryServiceServicer_to_server(InventoryServicer(), server)
-    listen_addr = "[::]:50052"
-    server.add_insecure_port(listen_addr)
-    logger.info(f"Starting gRPC server on {listen_addr}")
-    await server.start()
+    # Start gRPC server in a background task (non-blocking)
+    async def run_grpc_server():
+        server = grpc.aio.server()
+        inventory_pb2_grpc.add_InventoryServiceServicer_to_server(InventoryServicer(), server)
+        listen_addr = "[::]:50052"
+        server.add_insecure_port(listen_addr)
+        logger.info(f"Starting gRPC server on {listen_addr}")
+        await server.start()
+        app.state.grpc_server = server
+        # Keep the server running
+        await server.wait_for_termination()
+    
+    # Start gRPC server as background task
+    asyncio.create_task(run_grpc_server())
     
     yield
     
     # Shutdown logic
     logger.info("Stopping gRPC server...")
-    await server.stop(0)
+    if hasattr(app.state, 'grpc_server'):
+        await app.state.grpc_server.stop(0)
     await app.state.kafka.stop()
     # Shutdown OpenTelemetry providers
     tracer_provider.shutdown()
@@ -344,9 +366,9 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                 await context.abort(grpc.StatusCode.INTERNAL, str(e))
 
     async def ListInventory(self, request, context):
-        # Route eventual consistency list to REPLICA
+        # Use resilient database routing
         try:
-            async with reader_sessions["replica1"]() as session:
+            async with get_db() as session:
                 try:
                     items = await crud.get_all_inventory(session)
                     return inventory_pb2.ListInventoryResponse(

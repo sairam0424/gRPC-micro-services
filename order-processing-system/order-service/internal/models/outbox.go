@@ -9,6 +9,6 @@ type Outbox struct {
 	AggregateType string    `gorm:"index"`
 	AggregateID   string    `gorm:"index"`
 	EventType     string
-	Payload       string    `gorm:"type:text"` // JSON payload
+	Payload       []byte    `gorm:"type:bytea"` // Binary payload (Protobuf)
 	CreatedAt     time.Time `gorm:"index"`
 }

@@ -12,7 +12,7 @@ dependencies = [
     "sqlalchemy",
     "asyncpg",
     "pydantic-settings",
-    "aiokafka",
+    "confluent-kafka[protobuf]",
     "opentelemetry-api",
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp",
@@ -23,7 +23,8 @@ dependencies = [
     "etcd3",
     "psutil",
     "protobuf>=4.25.1",
-    "backoff"
+    "backoff",
+    "requests"
 ]
 requires-python = ">=3.10"
 

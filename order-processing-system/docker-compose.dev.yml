@@ -16,6 +16,7 @@ services:
       - KAFKA_BROKERS=kafka:29092
       - DATABASE_URL=${ORDER_DATABASE_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8081
     command: sh -c "air -c .air.toml"
     networks:
       - grpc-net
@@ -57,6 +58,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
     depends_on:
       order-service:
         condition: service_healthy
@@ -95,6 +97,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
     depends_on:
       order-service:
         condition: service_healthy
@@ -129,6 +132,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
     depends_on:
       kafka:
         condition: service_healthy
@@ -149,19 +153,28 @@ services:
       context: ./inventory-service
       dockerfile: Dockerfile
     ports:
-      - "8001:8001"
+      - "50052:50052"
     volumes:
       - ./inventory-service/src:/app/src
     env_file:
       - .env
     environment:
+      - KAFKA_BROKERS=kafka:29092
+      - KAFKA_TOPIC_IN=order-events
+      - KAFKA_TOPIC_OUT=inventory-events
+      - KAFKA_TOPIC_DLQ=inventory-events.dlq
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8081
       - DATABASE_URL=${DATABASE_URL}
       - REPLICA_DATABASE_URL=${REPLICA_DATABASE_URL}
       - REPLICA2_DATABASE_URL=${REPLICA2_DATABASE_URL}
       - ETCD_HOST=${ETCD_HOST}
       - ETCD_PORT=${ETCD_PORT}
-      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - OTEL_SERVICE_NAME=inventory-service
+      - OTEL_RESOURCE_ATTRIBUTES=service.name=inventory-service,service.version=1.0.0
       - PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
@@ -170,13 +183,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-      start_period: 30s
+      start_period: 60s
     depends_on:
       kafka:
         condition: service_healthy
       otel-collector:
         condition: service_started
       redis:
+        condition: service_healthy
+      schema-registry:
         condition: service_healthy
     networks:
       - grpc-net
@@ -327,6 +342,7 @@ services:
       - "9090:9090"
     networks:
       - grpc-net
+    restart: unless-stopped
 
   loki:
     image: grafana/loki:3.0.0
@@ -384,6 +400,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   kafka:
     image: confluentinc/cp-kafka:7.4.0
@@ -406,6 +423,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
+
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.4.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: kafka:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+    networks:
+      - grpc-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/subjects || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -415,8 +453,10 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
     depends_on:
       - kafka
+      - schema-registry
     networks:
       - grpc-net
 
@@ -490,6 +530,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 5
+      start_period: 30s
 
   haproxy:
     image: haproxy:2.8
@@ -534,11 +575,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   flink-jobmanager:
     image: flink:1.18.1-java11
     ports:
-      - "8081:8081"
+      - "8088:8081"  # Changed from 8084 to 8088 to avoid conflict with Elasticvue
     command: jobmanager
     environment:
       - |
@@ -551,6 +593,7 @@ services:
         s3.access-key: ${MINIO_ROOT_USER}
         s3.secret-key: ${MINIO_ROOT_PASSWORD}
         s3.path.style.access: true
+      - ENABLE_BUILT_IN_PLUGINS=flink-s3-fs-hadoop-1.18.1.jar
     depends_on:
       - minio
     networks:
@@ -571,6 +614,7 @@ services:
         s3.access-key: ${MINIO_ROOT_USER}
         s3.secret-key: ${MINIO_ROOT_PASSWORD}
         s3.path.style.access: true
+      - ENABLE_BUILT_IN_PLUGINS=flink-s3-fs-hadoop-1.18.1.jar
     depends_on:
       - flink-jobmanager
     networks:
@@ -590,6 +634,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 60s
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
@@ -606,10 +651,12 @@ services:
     networks:
       - grpc-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"' || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
 
   elasticvue:
     image: cars10/elasticvue:latest
@@ -681,6 +728,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
 
     depends_on:
       - kafka

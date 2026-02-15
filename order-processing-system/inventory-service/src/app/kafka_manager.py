@@ -1,164 +1,215 @@
 import json
 import logging
-import asyncio
-import backoff
-from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+import struct
+import requests
+from typing import Optional
+from confluent_kafka import Consumer, Producer, KafkaError
+from confluent_kafka.serialization import SerializationContext, MessageField
+from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry.protobuf import ProtobufDeserializer, ProtobufSerializer
 from . import crud
 from .database import writer_session, reader_sessions
 from .bloom_filter import filter_manager
 from .cache import cache_manager
+from generated.events.v1 import events_pb2
 
 logger = logging.getLogger(__name__)
 
 class KafkaManager:
-    def __init__(self, brokers, topic_in, topic_out, topic_dlq=None):
+    def __init__(self, brokers, topic_in, topic_out, schema_registry_url, topic_dlq=None):
         self.brokers = brokers
         self.topic_in = topic_in
         self.topic_out = topic_out
         self.topic_dlq = topic_dlq or f"{topic_in}.dlq"
-        self.consumer = None
-        self.producer = None
-        self._stop_event = asyncio.Event()
-
-    async def start(self):
-        self.consumer = AIOKafkaConsumer(
-            self.topic_in,
-            bootstrap_servers=self.brokers,
-            group_id="inventory-service-group",
-            value_deserializer=lambda v: json.loads(v.decode('utf-8'))
-        )
-        self.producer = AIOKafkaProducer(
-            bootstrap_servers=self.brokers,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+        self.schema_registry_url = schema_registry_url
+        
+        # Initialize Schema Registry client
+        self.schema_registry_client = SchemaRegistryClient({'url': schema_registry_url})
+        
+        # Initialize Protobuf deserializer for incoming events
+        self.deserializer = ProtobufDeserializer(
+            events_pb2.OrderCreatedEvent,
+            {'use.deprecated.format': False}
         )
         
-        # Start connection in background to avoid blocking lifespan
-        asyncio.create_task(self._connect_and_run())
-        logger.info(f"Kafka Manager initialization started (background) for {self.brokers}")
+        # Initialize Protobuf serializer for outgoing events
+        self.inventory_reserved_serializer = ProtobufSerializer(
+            events_pb2.InventoryReservedEvent,
+            self.schema_registry_client,
+            {'use.deprecated.format': False}
+        )
+        
+        self.inventory_failed_serializer = ProtobufSerializer(
+            events_pb2.InventoryFailedEvent,
+            self.schema_registry_client,
+            {'use.deprecated.format': False}
+        )
+        
+        self.inventory_updated_serializer = ProtobufSerializer(
+            events_pb2.InventoryUpdatedEvent,
+            self.schema_registry_client,
+            {'use.deprecated.format': False}
+        )
+        
+        # Initialize Consumer
+        self.consumer = Consumer({
+            'bootstrap.servers': brokers,
+            'group.id': 'inventory-service-group',
+            'auto.offset.reset': 'earliest',
+            'enable.auto.commit': True
+        })
+        
+        # Initialize Producer
+        self.producer = Producer({
+            'bootstrap.servers': brokers,
+            'client.id': 'inventory-service-producer'
+        })
+        
+        self.running = False
 
-    async def _connect_and_run(self):
-        """Internal method to handle connection and the consume loop"""
+    def start(self):
+        """Start consuming messages"""
+        self.running = True
+        self.consumer.subscribe([self.topic_in])
+        logger.info(f"Kafka Manager started, subscribed to {self.topic_in}")
+        
         try:
-            logger.info("Connecting to Kafka...")
-            await self.consumer.start()
-            await self.producer.start()
-            logger.info("Kafka consumer and producer started successfully")
-            await self.consume_loop()
+            while self.running:
+                msg = self.consumer.poll(timeout=1.0)
+                
+                if msg is None:
+                    continue
+                    
+                if msg.error():
+                    if msg.error().code() == KafkaError._PARTITION_EOF:
+                        continue
+                    else:
+                        logger.error(f"Consumer error: {msg.error()}")
+                        continue
+                
+                try:
+                    # Deserialize Protobuf message
+                    event = self._deserialize_event(msg.value())
+                    
+                    if event:
+                        logger.info(f"Received event: {event.event_type} for order {event.order_id}")
+                        
+                        if event.event_type == "order.created":
+                            self._handle_order_created_sync(event)
+                        elif event.event_type == "inventory.updated":
+                            self._handle_inventory_updated_sync(event)
+                            
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}")
+                    self._publish_to_dlq_sync(msg.value(), str(e))
+                    
         except Exception as e:
-            logger.error(f"Failed to start Kafka: {e}")
-            # We don't crash the app, but health check will reflect disconnected state
+            logger.error(f"Fatal error in consume loop: {e}")
+        finally:
+            self.consumer.close()
 
-    async def stop(self):
-        self._stop_event.set()
-        if self.consumer:
-            try:
-                await self.consumer.stop()
-            except Exception:
-                pass
-        if self.producer:
-            try:
-                await self.producer.stop()
-            except Exception:
-                pass
+    def stop(self):
+        """Stop the consumer"""
+        self.running = False
+        logger.info("Kafka Manager stopping...")
 
     def is_healthy(self) -> bool:
-        """Check if Kafka producer and consumer are running and connected"""
-        # A simple check: if we have the objects and the producer sender task is running
-        return (self.producer is not None and 
-                self.consumer is not None and 
-                getattr(self.producer, '_sender', None) is not None and 
-                getattr(self.producer._sender, 'sender_task', None) is not None)
+        """Check if Kafka is healthy"""
+        return self.running
 
-    async def publish_to_dlq(self, event, error):
-        """Publish failed events to the Dead Letter Queue"""
+    def _deserialize_event(self, value: bytes):
+        """Deserialize Confluent wire format Protobuf message"""
+        try:
+            # Confluent wire format: [magic_byte][schema_id][protobuf_data]
+            if len(value) < 5:
+                raise ValueError("Message too short for Confluent wire format")
+            
+            magic_byte = value[0]
+            if magic_byte != 0:
+                raise ValueError(f"Invalid magic byte: {magic_byte}")
+            
+            schema_id = struct.unpack('>I', value[1:5])[0]
+            protobuf_data = value[5:]
+            
+            # Deserialize based on schema (for now, assume OrderCreatedEvent)
+            # In production, you'd fetch schema from registry and deserialize accordingly
+            event = events_pb2.OrderCreatedEvent()
+            event.ParseFromString(protobuf_data)
+            return event
+            
+        except Exception as e:
+            logger.error(f"Failed to deserialize event: {e}")
+            return None
+
+    def _handle_order_created_sync(self, event):
+        """Handle order.created event synchronously"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.handle_order_created(event))
+        finally:
+            loop.close()
+
+    def _handle_inventory_updated_sync(self, event):
+        """Handle inventory.updated event synchronously"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.handle_inventory_updated(event))
+        finally:
+            loop.close()
+
+    def _publish_to_dlq_sync(self, original_msg, error):
+        """Publish to DLQ synchronously"""
         dlq_event = {
-            "original_event": event,
-            "error": str(error),
+            "original_event": original_msg.hex(),
+            "error": error,
             "service": "inventory-service",
             "retry_exhausted": True
         }
         try:
-            await self.producer.send_and_wait(self.topic_dlq, dlq_event)
-            logger.warning(f"Message sent to DLQ {self.topic_dlq}: {event.get('order_id')}")
+            self.producer.produce(
+                self.topic_dlq,
+                value=json.dumps(dlq_event).encode('utf-8')
+            )
+            self.producer.flush()
+            logger.warning(f"Message sent to DLQ {self.topic_dlq}")
         except Exception as e:
             logger.error(f"Failed to publish to DLQ: {e}")
 
-    async def consume_loop(self):
-        try:
-            async for msg in self.consumer:
-                if self._stop_event.is_set():
-                    break
-                
-                event = msg.value
-                logger.info(f"Received event: {event.get('event_type')} for order {event.get('order_id')}")
-                
-                # Use backoff to retry message processing
-                @backoff.on_exception(
-                    backoff.expo,
-                    (Exception),
-                    max_tries=3,
-                    on_giveup=lambda details: asyncio.create_task(self.publish_to_dlq(event, details['exception']))
-                )
-                async def process_with_retry():
-                    if event.get("event_type") == "order.created":
-                        await self.handle_order_created(event)
-                    elif event.get("event_type") == "inventory.updated":
-                        await self.handle_inventory_updated(event)
-
-                try:
-                    await process_with_retry()
-                except Exception as e:
-                    logger.error(f"Processing failed after retries: {e}")
-
-        except Exception as e:
-            logger.error(f"Error in Kafka consume loop: {e}")
-
     async def handle_order_created(self, event):
-        order_id = event["order_id"]
-        customer_id = event["customer_id"]
-        items = event["items"]
+        """Handle order.created event"""
+        order_id = event.order_id
+        customer_id = event.customer_id
+        items = event.items
         
-        # We need to adapt the items list to what our crud expects (objects with product_id and quantity)
+        # Convert protobuf items to internal format
         class ItemReq:
             def __init__(self, product_id, quantity):
                 self.product_id = product_id
                 self.quantity = quantity
 
-        req_items = [ItemReq(i["product_id"], i["quantity"]) for i in items]
+        req_items = [ItemReq(item.product_id, item.quantity) for item in items]
         
-        # Tier-2 Bloom Filter Check: Is the product likely in stock?
+        # Tier-2 Bloom Filter Check
         for item in req_items:
             if not filter_manager.is_in_stock(item.product_id):
-                logger.info(f"Bloom Filter Reject (Tier-2): Product {item.product_id} likely out of stock for order {order_id}")
-                response_event = {
-                    "event_type": "inventory.failed",
-                    "order_id": order_id,
-                    "customer_id": customer_id,
-                    "status": "FAILED",
-                    "message": f"Product {item.product_id} is likely out of stock (Tier-2 check)",
-                    "items": items
-                }
-                await self.producer.send_and_wait(self.topic_out, response_event)
+                logger.info(f"Bloom Filter Reject: Product {item.product_id} likely out of stock")
+                await self._publish_inventory_failed(event, f"Product {item.product_id} is likely out of stock")
                 return
 
-            # 2. Fast Cache Check
+            # Fast Cache Check
             cached_qty = cache_manager.get_stock(item.product_id)
             if cached_qty is not None and cached_qty < item.quantity:
-                logger.info(f"Cache Reject: Product {item.product_id} has insufficient stock for order {order_id} ({cached_qty} < {item.quantity})")
-                response_event = {
-                    "event_type": "inventory.failed",
-                    "order_id": order_id,
-                    "customer_id": customer_id,
-                    "status": "FAILED",
-                    "message": f"Insufficient stock for {item.product_id} (cached check)",
-                    "items": items
-                }
-                await self.producer.send_and_wait(self.topic_out, response_event)
+                logger.info(f"Cache Reject: Insufficient stock for {item.product_id}")
+                await self._publish_inventory_failed(event, f"Insufficient stock for {item.product_id}")
                 return
 
         async with writer_session() as session:
             # Idempotency Check
-            event_id = event.get("event_id") or f"order_{order_id}"
+            event_id = event.event_id or f"order_{order_id}"
             if not await crud.check_and_record_event(session, event_id, "inventory-service"):
                 logger.info(f"Duplicate event ignored: {event_id}")
                 return
@@ -166,46 +217,79 @@ class KafkaManager:
             try:
                 success, message, response_items = await crud.reserve_stock_atomic(session, order_id, req_items)
                 
-                response_event = {
-                    "event_type": "inventory.reserved" if success else "inventory.failed",
-                    "order_id": order_id,
-                    "customer_id": customer_id,
-                    "status": "PROCESSING" if success else "FAILED",
-                    "message": message,
-                    "items": items
-                }
-                
-                await self.producer.send_and_wait(self.topic_out, response_event)
-                logger.info(f"Published outcome for order {order_id}: {response_event['event_type']}")
-                
+                if success:
+                    await self._publish_inventory_reserved(event, message)
+                else:
+                    await self._publish_inventory_failed(event, message)
+                    
             except Exception as e:
                 logger.error(f"Error handling order.created: {e}")
-                # Optional: publish a generic failure event
+                await self._publish_inventory_failed(event, str(e))
+
+    async def _publish_inventory_reserved(self, original_event, message):
+        """Publish inventory.reserved event"""
+        event = events_pb2.InventoryReservedEvent(
+            event_id=f"inv_reserved_{original_event.order_id}",
+            event_type="inventory.reserved",
+            order_id=original_event.order_id,
+            customer_id=original_event.customer_id,
+            status="PROCESSING",
+            message=message,
+            items=original_event.items,
+            timestamp=int(time.time() * 1000)
+        )
+        
+        serialized = self.inventory_reserved_serializer(
+            event,
+            SerializationContext(self.topic_out, MessageField.VALUE)
+        )
+        
+        self.producer.produce(self.topic_out, value=serialized, key=original_event.order_id.encode('utf-8'))
+        self.producer.flush()
+        logger.info(f"Published inventory.reserved for order {original_event.order_id}")
+
+    async def _publish_inventory_failed(self, original_event, message):
+        """Publish inventory.failed event"""
+        import time
+        event = events_pb2.InventoryFailedEvent(
+            event_id=f"inv_failed_{original_event.order_id}",
+            event_type="inventory.failed",
+            order_id=original_event.order_id,
+            customer_id=original_event.customer_id,
+            status="FAILED",
+            message=message,
+            items=original_event.items,
+            timestamp=int(time.time() * 1000)
+        )
+        
+        serialized = self.inventory_failed_serializer(
+            event,
+            SerializationContext(self.topic_out, MessageField.VALUE)
+        )
+        
+        self.producer.produce(self.topic_out, value=serialized, key=original_event.order_id.encode('utf-8'))
+        self.producer.flush()
+        logger.info(f"Published inventory.failed for order {original_event.order_id}")
 
     async def handle_inventory_updated(self, event):
-        """
-        Golden Rule: Refresh cache via events.
-        Ensures consistency across all instances.
-        """
-        event_id = event.get("event_id") or f"inv_upd_{event.get('product_id')}_{event.get('quantity')}"
+        """Handle inventory.updated event"""
+        event_id = event.event_id or f"inv_upd_{event.product_id}_{event.quantity}"
         
         async with writer_session() as session:
             if not await crud.check_and_record_event(session, event_id, "inventory-service"):
                 logger.info(f"Duplicate inventory update ignored: {event_id}")
                 return
-            await session.commit() # Commit the idempotency record early for cache/bloom sync if needed, 
-                                   # although typically we'd do it as part of a larger transaction.
+            await session.commit()
 
-        product_id = event.get("product_id")
-        quantity = event.get("quantity")
-        if product_id is not None and quantity is not None:
-            logger.info(f"Event-driven Cache Refresh & Async Rep: {product_id} = {quantity}")
-            # 1. Update Cache
+        product_id = event.product_id
+        quantity = event.quantity
+        
+        if product_id and quantity is not None:
+            logger.info(f"Event-driven Cache Refresh: {product_id} = {quantity}")
             cache_manager.set_stock(product_id, quantity)
-            # 2. Update Tier-2 Bloom Filter
             filter_manager.update_stock_status(product_id, quantity > 0)
             
-            # 3. Async Replication to Replica 2
+            # Async Replication to Replica 2
             async with reader_sessions["replica2"]() as session:
                 try:
                     await crud.update_stock_level(session, product_id, 0, override_quantity=quantity)
@@ -214,13 +298,3 @@ class KafkaManager:
                 except Exception as e:
                     logger.error(f"Async Replication failed for {product_id}: {e}")
                     await session.rollback()
-
-    async def publish_inventory_update(self, product_id: str, quantity: int):
-        """Helper to broadcast inventory changes"""
-        event = {
-            "event_type": "inventory.updated",
-            "product_id": product_id,
-            "quantity": quantity
-        }
-        await self.producer.send_and_wait(self.topic_out, event)
-        logger.info(f"Published inventory update: {product_id} = {quantity}")
