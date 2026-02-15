@@ -5,21 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/segmentio/kafka-go"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
 type Producer struct {
-	writer *kafka.Writer
+	producer *kafka.Producer
+	topic    string
 }
 
-func NewProducer(brokers []string, topic string) *Producer {
-	return &Producer{
-		writer: &kafka.Writer{
-			Addr:     kafka.TCP(brokers...),
-			Topic:    topic,
-			Balancer: &kafka.LeastBytes{},
-		},
+func NewProducer(brokers []string, topic string) (*Producer, error) {
+	p, err := kafka.NewProducer(&kafka.ConfigMap{
+		"bootstrap.servers": brokers[0],
+	})
+	if err != nil {
+		return nil, err
 	}
+	return &Producer{
+		producer: p,
+		topic:    topic,
+	}, nil
 }
 
 func (p *Producer) PublishDLQ(ctx context.Context, originalEvent []byte, err error) error {
@@ -35,11 +39,25 @@ func (p *Producer) PublishDLQ(ctx context.Context, originalEvent []byte, err err
 		return fmt.Errorf("failed to marshal DLQ event: %w", marshalErr)
 	}
 
-	return p.writer.WriteMessages(ctx, kafka.Message{
-		Value: payload,
-	})
+	deliveryChan := make(chan kafka.Event)
+	err = p.producer.Produce(&kafka.Message{
+		TopicPartition: kafka.TopicPartition{Topic: &p.topic, Partition: kafka.PartitionAny},
+		Value:          payload,
+	}, deliveryChan)
+	if err != nil {
+		return err
+	}
+
+	e := <-deliveryChan
+	m := e.(*kafka.Message)
+	if m.TopicPartition.Error != nil {
+		return m.TopicPartition.Error
+	}
+
+	return nil
 }
 
 func (p *Producer) Close() error {
-	return p.writer.Close()
+	p.producer.Close()
+	return nil
 }

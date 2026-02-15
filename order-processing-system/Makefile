@@ -25,6 +25,13 @@ generate:
 	touch inventory-service/src/generated/__init__.py
 	find inventory-service/src/generated -type d -exec touch {}/__init__.py \;
 	
+	mkdir -p analytics-pipeline/src/generated
+	cd api-gateway && ./venv/bin/python -m grpc_tools.protoc -I../proto -I.. \
+	    --python_out=../analytics-pipeline/src/generated \
+	    ../proto/events/v1/events.proto
+	touch analytics-pipeline/src/generated/__init__.py
+	find analytics-pipeline/src/generated -type d -exec touch {}/__init__.py \;
+	
 	@echo "Generating Go gRPC code..."
 	mkdir -p order-service/pkg/generated
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \
@@ -51,7 +58,7 @@ generate:
 		-I$$(go env GOPATH)/pkg/mod \
 		--go_out=order-streamer/pkg/generated --go_opt=paths=source_relative \
 		--go-grpc_out=order-streamer/pkg/generated --go-grpc_opt=paths=source_relative \
-		proto/stream/v1/stream.proto
+		proto/stream/v1/stream.proto proto/events/v1/events.proto
 	
 	@echo "Validating OpenAPI spec with go-swagger..."
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \

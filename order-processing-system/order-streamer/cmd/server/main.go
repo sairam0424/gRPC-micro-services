@@ -151,10 +151,22 @@ func main() {
 		subscribers: make(map[chan kafka.OrderEvent]struct{}),
 	}
 
-	dlqProducer := kafka.NewProducer([]string{kafkaBrokers}, "order-streamer.dlq")
+	schemaRegistryURL := os.Getenv("SCHEMA_REGISTRY_URL")
+	if schemaRegistryURL == "" {
+		schemaRegistryURL = "http://localhost:8081"
+	}
+
+	dlqProducer, err := kafka.NewProducer([]string{kafkaBrokers}, "order-streamer.dlq")
+	if err != nil {
+		log.Fatalf("failed to create dlq producer: %v", err)
+	}
 	defer dlqProducer.Close()
-	consumer := kafka.NewConsumer([]string{kafkaBrokers}, "order-events", "order-streamer-group", dlqProducer)
-	go consumer.Start(context.Background())
+
+	consumer, err := kafka.NewConsumer([]string{kafkaBrokers}, "order-events", "order-streamer-group", dlqProducer, schemaRegistryURL)
+	if err != nil {
+		log.Fatalf("failed to create consumer: %v", err)
+	}
+	go consumer.Start(context.Background(), "order-events")
 
 	// Route events from Kafka to the hub
 	go func() {

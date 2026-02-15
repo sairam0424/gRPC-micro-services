@@ -26,9 +26,14 @@ class KafkaManager:
         # Initialize Schema Registry client
         self.schema_registry_client = SchemaRegistryClient({'url': schema_registry_url})
         
-        # Initialize Protobuf deserializer for incoming events
-        self.deserializer = ProtobufDeserializer(
+        # Initialize Protobuf deserializers for incoming events
+        self.order_created_deserializer = ProtobufDeserializer(
             events_pb2.OrderCreatedEvent,
+            {'use.deprecated.format': False}
+        )
+        
+        self.inventory_updated_deserializer = ProtobufDeserializer(
+            events_pb2.InventoryUpdatedEvent,
             {'use.deprecated.format': False}
         )
         
@@ -89,7 +94,7 @@ class KafkaManager:
                 
                 try:
                     # Deserialize Protobuf message
-                    event = self._deserialize_event(msg.value())
+                    event = self._deserialize_event(msg)
                     
                     if event:
                         logger.info(f"Received event: {event.event_type} for order {event.order_id}")
@@ -117,25 +122,26 @@ class KafkaManager:
         """Check if Kafka is healthy"""
         return self.running
 
-    def _deserialize_event(self, value: bytes):
-        """Deserialize Confluent wire format Protobuf message"""
+    def _deserialize_event(self, msg):
+        """Deserialize Confluent wire format Protobuf message using official deserializer"""
+        if msg is None or msg.value() is None:
+            return None
+            
         try:
-            # Confluent wire format: [magic_byte][schema_id][protobuf_data]
-            if len(value) < 5:
-                raise ValueError("Message too short for Confluent wire format")
-            
-            magic_byte = value[0]
-            if magic_byte != 0:
-                raise ValueError(f"Invalid magic byte: {magic_byte}")
-            
-            schema_id = struct.unpack('>I', value[1:5])[0]
-            protobuf_data = value[5:]
-            
-            # Deserialize based on schema (for now, assume OrderCreatedEvent)
-            # In production, you'd fetch schema from registry and deserialize accordingly
-            event = events_pb2.OrderCreatedEvent()
-            event.ParseFromString(protobuf_data)
-            return event
+            # Try to deserialize as OrderCreatedEvent first
+            try:
+                event = self.order_created_deserializer(
+                    msg.value(), 
+                    SerializationContext(msg.topic(), MessageField.VALUE)
+                )
+                return event
+            except Exception:
+                # If that fails, try InventoryUpdatedEvent
+                event = self.inventory_updated_deserializer(
+                    msg.value(),
+                    SerializationContext(msg.topic(), MessageField.VALUE)
+                )
+                return event
             
         except Exception as e:
             logger.error(f"Failed to deserialize event: {e}")
