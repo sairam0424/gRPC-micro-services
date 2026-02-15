@@ -14,6 +14,14 @@ scrape_configs:
     static_configs:
       - targets: ['api-gateway-1:8000', 'api-gateway-2:8000']
 
+  - job_name: 'inventory-service'
+    static_configs:
+      - targets: ['inventory-service:8001']
+
+  - job_name: 'auth-service'
+    static_configs:
+      - targets: ['auth-service:8002']
+
   - job_name: 'envoy'
     metrics_path: /stats/prometheus
     static_configs:

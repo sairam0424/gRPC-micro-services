@@ -57,7 +57,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Order Processing API Gateway", lifespan=lifespan)
 
-from .auth import verify_jwt
+import sys
+import os
+
+# Add src directory to PYTHONPATH
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app.auth import verify_jwt
 from .bloom_filter import bloom_manager
 from .rate_limiter import rate_limiter
 from .load_shedder import load_shedder
