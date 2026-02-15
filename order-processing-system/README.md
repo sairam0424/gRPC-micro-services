@@ -30,10 +30,11 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Full Observability**: OpenTelemetry, Jaeger, Prometheus, Loki, and Grafana.
 - **Analytics Pipeline (Apache Flink)**: Real-time stream processing with **Exactly-Once Semantics**, **RocksDB StateBackend**, and **S3/Minio Checkpointing**.
 - **Columnar Analytics (ClickHouse)**: High-performance OLAP storage for BI dashboards and aggregation.
-- **Search Engine (Elasticsearch)**: Real-time search indexing for orders and products.
+- **Search Engine (Elasticsearch)**: Real-time search indexing for orders and products, with a resilient Cloud/Local fallback architecture.
+- **Elasticvue**: Integrated UI for real-time Elasticsearch exploration and cluster management.
 - **ML Feature Store (DuckDB + Feast)**: Localized feature extraction and persistence for ML training and inference.
 - **Resilience Strategy (DLQ & Replay)**: Implementation of Dead Letter Queues with exponential backoff and idempotent replay for all core services.
-- **Admin Visibility**: Kafka UI, **Flink UI**, **DLQ Monitor**, **RedisInsight**, and **Redis Commander**.
+- **Admin Visibility**: Kafka UI, **Flink UI**, **Elasticvue**, **DLQ Monitor**, **RedisInsight**, and **Redis Commander**.
 - **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
 ## Architecture (Raft Cluster + Multi-Replica CDC)
 
@@ -134,6 +135,16 @@ The system features a sophisticated database architecture designed for scaling a
 - **Leader-Replica Orchestration**: The `inventory-service` dynamically routes writes and strong-consistency reads to the PostgreSQL Leader, while eventual-consistency reads (like catalog listings) are routed to a Read Replica.
 - **Change Data Capture (CDC)**: Powered by **Debezium**, the system captures row-level changes from the PostgreSQL Write-Ahead Log (WAL) and streams them into Kafka topics (`inventory_cdc.public.inventory`).
 - **Read/Write Splitting**: Managed via dual SQLAlchemy engines (`writer_engine` and `reader_engine`) in the `inventory-service`.
+
+## Real-time Analytics Pipeline
+The system incorporates a robust analytics pipeline that processes order events in real-time to drive BI, search, and ML features.
+
+- **Stream Processing**: Apache Flink consumes `order.events` from Kafka, performingExactly-Once aggregations and transformations.
+- **Multi-Sink Architecture**:
+    - **ClickHouse**: Optimized for BI dashboards and fast analytical queries.
+    - **Elasticsearch**: Powering sub-second order search and discovery.
+    - **DuckDB**: Serving as a local feature store for ML model inference.
+- **Monitoring**: Use **Flink UI** (`:8081`) to monitor job health and **Elasticvue** (`:8084`) to explore search indices.
 
 ## Setup Guide: Enabling CDC (Neon Postgres)
 
@@ -240,9 +251,11 @@ The system utilizes a high-performance caching layer in the `inventory-service` 
 | :--- | :--- | :--- |
 | **Grafana** | `http://localhost:3000` | Unified dashboards for metrics, logs, and cache performance. |
 | **Jaeger** | `http://localhost:16686` | Distributed tracing for gRPC and HTTP requests. |
+| **Elasticvue** | `http://localhost:8084` | Native Elasticsearch UI for browsing indices and cluster health. |
+| **Flink UI** | `http://localhost:8081` | Real-time monitoring of stream processing jobs. |
+| **Kafka UI** | `http://localhost:8080` | Monitor topics and `inventory.updated` events. |
 | **RedisInsight** | `http://localhost:8003` | Native Redis UI for memory analysis and profiling. |
 | **Redis Commander** | `http://localhost:8081` | Web-based Redis key management. |
-| **Kafka UI** | `http://localhost:8080` | Monitor topics and `inventory.updated` events. |
 | **DLQ Monitor** | `http://localhost:8086` | View events in Dead Letter Queues. |
 | **Envoy Admin** | `http://localhost:9901` | Traffic distribution metrics & cluster health. |
 | **Prometheus** | `http://localhost:9090` | Raw metrics and service target status. |
@@ -371,6 +384,20 @@ order-processing-system/
 
 
 
+
+### Essential Commands
+
+| Command | Description |
+| :--- | :--- |
+| `make up-dev` | Start all services with hot-reload enabled |
+| `make test` | Run end-to-end order flow validation |
+| `make seed` | Populate systems with random order traffic |
+| `make status` | Check health of all containers |
+| `make analytics-up` | Start only the analytics stack (Flink, ES, ClickHouse) |
+| `make analytics-logs` | Stream analytics pipeline processing logs |
+| `make elasticvue` | Open Elasticsearch management UI |
+| `make flink-ui` | Open Apache Flink Dashboard |
+| `make dlq-ui` | Open Kafka Dead Letter Queue manager |
 
 ## Makefile Targets
 
