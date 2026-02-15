@@ -140,11 +140,38 @@ clickhouse-ui:
 	@echo "ClickHouse HTTP Interface: http://localhost:8123"
 	open http://localhost:8123/play
 
+elasticvue:
+	open http://localhost:8084
+
+dlq-ui:
+	open http://localhost:8086
+
 minio-ui:
 	open http://localhost:9001
 
 es-health:
 	curl http://localhost:9200/_cluster/health?pretty
+
+analytics-logs:
+	docker compose -f docker-compose.dev.yml logs -f analytics-pipeline
+
+flink-logs:
+	docker compose -f docker-compose.dev.yml logs -f flink-jobmanager flink-taskmanager
+
+clickhouse-logs:
+	docker compose -f docker-compose.dev.yml logs -f clickhouse
+
+es-logs:
+	docker compose -f docker-compose.dev.yml logs -f elasticsearch elasticvue
+
+cdc-logs:
+	docker compose -f docker-compose.dev.yml logs -f connect
+
+analytics-up:
+	docker compose -f docker-compose.dev.yml up -d flink-jobmanager flink-taskmanager clickhouse elasticsearch elasticvue minio minio-setup analytics-pipeline
+
+analytics-down:
+	docker compose -f docker-compose.dev.yml stop flink-jobmanager flink-taskmanager clickhouse elasticsearch elasticvue analytics-pipeline
 
 kafka-dlq-topics:
 	@echo "Creating DLQ topics..."
@@ -194,7 +221,21 @@ help:
 	@echo "  flink-ui      - Open Flink UI"
 	@echo "  clickhouse-ui - Open ClickHouse UI"
 	@echo "  minio-ui      - Open MinIO UI"
+	@echo "  elasticvue    - Open Elasticvue UI (Elasticsearch Browser)"
+	@echo "  dlq-ui        - Open DLQ Management UI"
 	@echo "  es-health     - Check Elasticsearch cluster health"
+	@echo ""
+	@echo "  Service Logs:"
+	@echo "  analytics-logs - Follow Analytics Pipeline logs"
+	@echo "  flink-logs     - Follow Flink logs"
+	@echo "  clickhouse-logs- Follow ClickHouse logs"
+	@echo "  es-logs        - Follow Elasticsearch logs"
+	@echo "  cdc-logs       - Follow Debezium Connect logs"
+	@echo ""
+	@echo "  Analytics Lifecycle:"
+	@echo "  analytics-up   - Start analytics stack"
+	@echo "  analytics-down - Stop analytics stack"
+	@echo ""
 	@echo "  kafka-dlq-topics - Create DLQ Kafka topics"
 	@echo "  replay-inventory      - Replay inventory DLQ events"
 	@echo "  replay-order-streamer - Replay order-streamer DLQ events"
