@@ -244,7 +244,7 @@ func main() {
 	}
 	defer producer.Close()
 
-	consumer, err := kafka.NewOrderConsumer([]string{kafkaBrokers}, "inventory-events", "order-service-group", producer)
+	consumer, err := kafka.NewOrderConsumer([]string{kafkaBrokers}, "inventory-events", "order-service-group", producer, schemaRegistryURL)
 	if err != nil {
 		log.Fatalf("failed to create kafka consumer: %v", err)
 	}
