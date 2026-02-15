@@ -256,6 +256,7 @@ services:
   web-client:
     build:
       context: ./web-client
+      target: development
     ports:
       - "3001:3000"
     volumes:
