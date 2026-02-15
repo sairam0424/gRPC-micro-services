@@ -2,23 +2,25 @@ package kafka
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"log"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde/protobuf"
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/database"
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/models"
 	eventsv1 "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1"
-	"google.golang.org/protobuf/proto"
 )
 
 type OrderConsumer struct {
-	consumer *kafka.Consumer
-	producer *Producer
+	consumer     *kafka.Consumer
+	producer     *Producer
+	deserializer *protobuf.Deserializer
 }
 
-func NewOrderConsumer(brokers []string, topic, groupID string, producer *Producer) (*OrderConsumer, error) {
+func NewOrderConsumer(brokers []string, topic, groupID string, producer *Producer, schemaRegistryURL string) (*OrderConsumer, error) {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers": brokers[0],
 		"group.id":          groupID,
@@ -28,15 +30,26 @@ func NewOrderConsumer(brokers []string, topic, groupID string, producer *Produce
 		return nil, err
 	}
 
+	client, err := schemaregistry.NewClient(schemaregistry.NewConfig(schemaRegistryURL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create schema registry client: %w", err)
+	}
+
+	deser, err := protobuf.NewDeserializer(client, serde.ValueSerde, protobuf.NewDeserializerConfig())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create protobuf deserializer: %w", err)
+	}
+
 	return &OrderConsumer{
-		consumer: c,
-		producer: producer,
+		consumer:     c,
+		producer:     producer,
+		deserializer: deser,
 	}, nil
 }
 
 func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 	log.Printf("Order Service Consumer started on topic: %s", topic)
-	
+
 	err := c.consumer.Subscribe(topic, nil)
 	if err != nil {
 		log.Fatalf("Failed to subscribe to topic: %v", err)
@@ -53,11 +66,29 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 				continue
 			}
 
-			// Deserialize Confluent wire format Protobuf message
-			event, err := c.deserializeEvent(msg.Value)
+			// Deserialize using official deserializer
+			// Note: The deserializer will automatically pick the right message type if registered
+			// or we can specify the target type.
+			event := &eventsv1.InventoryReservedEvent{}
+			err = c.deserializer.DeserializeInto(topic, msg.Value, event)
 			if err != nil {
-				log.Printf("Error deserializing event: %v", err)
-				continue
+				// Try InventoryFailedEvent if it fails (simplistic handling)
+				failedEvent := &eventsv1.InventoryFailedEvent{}
+				if err2 := c.deserializer.DeserializeInto(topic, msg.Value, failedEvent); err2 == nil {
+					event = &eventsv1.InventoryReservedEvent{
+						EventId:    failedEvent.EventId,
+						EventType:  failedEvent.EventType,
+						OrderId:    failedEvent.OrderId,
+						CustomerId: failedEvent.CustomerId,
+						Status:     failedEvent.Status,
+						Message:    failedEvent.Message,
+						Items:      failedEvent.Items,
+						Timestamp:  failedEvent.Timestamp,
+					}
+				} else {
+					log.Printf("Error deserializing event from topic %s: %v (Failed also as inventory.failed: %v)", topic, err, err2)
+					continue
+				}
 			}
 
 			// Handle different event types
@@ -69,46 +100,6 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 			}
 		}
 	}
-}
-
-func (c *OrderConsumer) deserializeEvent(value []byte) (*eventsv1.InventoryReservedEvent, error) {
-	// Confluent wire format: [magic_byte][schema_id][protobuf_data]
-	if len(value) < 5 {
-		return nil, fmt.Errorf("message too short for Confluent wire format")
-	}
-
-	magicByte := value[0]
-	if magicByte != 0 {
-		return nil, fmt.Errorf("invalid magic byte: %d", magicByte)
-	}
-
-	schemaID := binary.BigEndian.Uint32(value[1:5])
-	log.Printf("Received message with schema ID: %d", schemaID)
-
-	protobufData := value[5:]
-
-	// Try to deserialize as InventoryReservedEvent first
-	event := &eventsv1.InventoryReservedEvent{}
-	if err := proto.Unmarshal(protobufData, event); err != nil {
-		// If that fails, try InventoryFailedEvent
-		failedEvent := &eventsv1.InventoryFailedEvent{}
-		if err := proto.Unmarshal(protobufData, failedEvent); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal protobuf: %w", err)
-		}
-		// Convert InventoryFailedEvent to InventoryReservedEvent structure for unified handling
-		event = &eventsv1.InventoryReservedEvent{
-			EventId:    failedEvent.EventId,
-			EventType:  failedEvent.EventType,
-			OrderId:    failedEvent.OrderId,
-			CustomerId: failedEvent.CustomerId,
-			Status:     failedEvent.Status,
-			Message:    failedEvent.Message,
-			Items:      failedEvent.Items,
-			Timestamp:  failedEvent.Timestamp,
-		}
-	}
-
-	return event, nil
 }
 
 func (c *OrderConsumer) handleInventoryReserved(event *eventsv1.InventoryReservedEvent) {
@@ -158,5 +149,6 @@ func (c *OrderConsumer) publishOrderUpdate(event *eventsv1.InventoryReservedEven
 }
 
 func (c *OrderConsumer) Close() error {
+	c.deserializer.Close()
 	return c.consumer.Close()
 }
