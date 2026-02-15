@@ -5,7 +5,7 @@ on:
 
 permissions:
   contents: read
-  issues: read
+  issues: read  # Write operations are handled through safe-outputs for security
   pull-requests: read
 
 safe-outputs:
