@@ -148,7 +148,7 @@ gh --version
 
 ### Compile Workflow:
 ```bash
-cd "/Users/sairamugge/Desktop/gRPC test"
+cd <project-directory>
 gh aw compile .github/workflows/daily-repo-activity.md
 ```
 

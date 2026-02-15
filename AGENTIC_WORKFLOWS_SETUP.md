@@ -233,7 +233,7 @@ This ensures:
 ## 11. **Support & Resources**
 
 ### Official Documentation:
-- GitHub Agentic Workflows: https://github.github.com/gh-aw/
+- GitHub Agentic Workflows: https://github.github.io/gh-aw/
 - Quick Start Guide: https://github.github.io/gh-aw/setup/quick-start/
 - Workflow Gallery: https://github.github.io/gh-aw/blog/
 

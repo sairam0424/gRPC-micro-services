@@ -1,1 +1,6 @@
+# GitHub Agentic Workflows lock files
+# Use merge=binary to prevent silent loss of changes during merges
+# After resolving conflicts on .lock.yml files, regenerate them by running:
+#   gh aw compile [workflow-name].md
+# to ensure consistency with the .md source and avoid dependency update loss
 .github/workflows/*.lock.yml linguist-generated=true merge=ours
