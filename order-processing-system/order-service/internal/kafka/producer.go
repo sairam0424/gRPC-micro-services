@@ -2,61 +2,85 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"log"
 
-	"github.com/segmentio/kafka-go"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde/protobuf"
+	eventsv1 "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1"
 )
 
-type OrderItem struct {
-	ProductID string  `json:"product_id"`
-	Quantity  int32   `json:"quantity"`
-	Price     float64 `json:"price"`
-}
-
-type OrderEvent struct {
-	EventType  string      `json:"event_type"` // e.g., "order.created", "order.updated"
-	OrderID    string      `json:"order_id"`
-	CustomerID string      `json:"customer_id"`
-	Status     string      `json:"status"`
-	Message    string      `json:"message"`
-	Items      []OrderItem `json:"items"`
-}
-
 type Producer struct {
-	writer *kafka.Writer
+	producer   *kafka.Producer
+	serializer *protobuf.Serializer
+	topic      string
 }
 
-func NewProducer(brokers []string, topic string) *Producer {
-	return &Producer{
-		writer: &kafka.Writer{
-			Addr:     kafka.TCP(brokers...),
-			Topic:    topic,
-			Balancer: &kafka.LeastBytes{},
-		},
-	}
-}
-
-func (p *Producer) PublishOrderEvent(ctx context.Context, event OrderEvent) error {
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return err
-	}
-
-	err = p.writer.WriteMessages(ctx, kafka.Message{
-		Key:   []byte(event.OrderID),
-		Value: payload,
+func NewProducer(brokers []string, topic string, schemaRegistryURL string) (*Producer, error) {
+	p, err := kafka.NewProducer(&kafka.ConfigMap{
+		"bootstrap.servers": brokers[0],
+		"client.id":         "order-service-producer",
+		"acks":              "all",
 	})
-
 	if err != nil {
-		log.Printf("Failed to publish event to Kafka: %v", err)
-		return err
+		return nil, err
 	}
 
-	log.Printf("Published event to Kafka: %s (Status: %s)", event.OrderID, event.Status)
+	client, err := schemaregistry.NewClient(schemaregistry.NewConfig(schemaRegistryURL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create schema registry client: %w", err)
+	}
+
+	ser, err := protobuf.NewSerializer(client, serde.ValueSerde, protobuf.NewSerializerConfig())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create protobuf serializer: %w", err)
+	}
+
+	return &Producer{
+		producer:   p,
+		serializer: ser,
+		topic:      topic,
+	}, nil
+}
+
+func (p *Producer) PublishOrderEvent(ctx context.Context, event *eventsv1.OrderCreatedEvent) error {
+	// Serialize the protobuf message using official serializer
+	payload, err := p.serializer.Serialize(p.topic, event)
+	if err != nil {
+		return fmt.Errorf("failed to serialize protobuf: %w", err)
+	}
+
+	// Produce message
+	deliveryChan := make(chan kafka.Event)
+	err = p.producer.Produce(&kafka.Message{
+		TopicPartition: kafka.TopicPartition{Topic: &p.topic, Partition: kafka.PartitionAny},
+		Key:            []byte(event.OrderId),
+		Value:          payload,
+	}, deliveryChan)
+
+	if err != nil {
+		return fmt.Errorf("failed to produce message: %w", err)
+	}
+
+	// Wait for delivery report
+	e := <-deliveryChan
+	m := e.(*kafka.Message)
+
+	if m.TopicPartition.Error != nil {
+		log.Printf("Failed to deliver message: %v\n", m.TopicPartition.Error)
+		return m.TopicPartition.Error
+	}
+
+	log.Printf("Published event to Kafka: %s (Type: %s, Status: %s)\n",
+		event.OrderId, event.EventType, event.Status)
 	return nil
 }
 
 func (p *Producer) Close() error {
-	return p.writer.Close()
+	p.producer.Flush(5000)
+	p.serializer.Close()
+	p.producer.Close()
+	return nil
 }

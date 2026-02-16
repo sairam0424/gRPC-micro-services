@@ -1,5 +1,9 @@
 import os
 import sys
+
+# Add src directory to PYTHONPATH
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import logging
 from opentelemetry import trace, metrics, _logs
 from opentelemetry.sdk.resources import Resource
@@ -22,8 +26,8 @@ from sqlmodel import Session, select, text
 from typing import List
 from pydantic import BaseModel
 
-from .models import User, engine, init_db, get_session
-from .security import get_password_hash, verify_password, create_access_token
+from app.models import User, engine, init_db, get_session
+from app.security import get_password_hash, verify_password, create_access_token
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
