@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+package events.v1;
+
+option go_package = "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1;eventsv1";
+
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+  double price = 3;
+}
+
+message OrderCreatedEvent {
+  string event_id = 1;
+  string event_type = 2;
+  string order_id = 3;
+  string customer_id = 4;
+  string status = 5;
+  string message = 6;
+  repeated OrderItem items = 7;
+  int64 timestamp = 8;
+}
+
+message InventoryReservedEvent {
+  string event_id = 1;
+  string event_type = 2;
+  string order_id = 3;
+  string customer_id = 4;
+  string status = 5;
+  string message = 6;
+  repeated OrderItem items = 7;
+  int64 timestamp = 8;
+}
+
+message InventoryFailedEvent {
+  string event_id = 1;
+  string event_type = 2;
+  string order_id = 3;
+  string customer_id = 4;
+  string status = 5;
+  string message = 6;
+  repeated OrderItem items = 7;
+  int64 timestamp = 8;
+}
+
+message InventoryUpdatedEvent {
+  string event_id = 1;
+  string event_type = 2;
+  string product_id = 3;
+  int32 quantity = 4;
+  int64 timestamp = 5;
+}

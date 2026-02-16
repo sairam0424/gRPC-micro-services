@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     build-essential \
+    protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
 # Fix JAVA_HOME for pemja/pyflink build (works for both amd64 and arm64)
@@ -44,8 +45,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install -r requirements.txt
+RUN uv pip install -r requirements.txt
 
 COPY src/ /app/src/
 
