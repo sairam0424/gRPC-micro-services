@@ -1,6 +1,9 @@
 # Order Processing System (gRPC Microservices)
 
-A production-style, event-driven order platform built with gRPC, FastAPI, Go, Kafka, and a Next.js dashboard. It demonstrates REST-to-gRPC bridging, inventory reservation with ACID guarantees, and real-time order status updates via Kafka + gRPC streaming + SSE.
+A production-style, event-driven order platform built with gRPC, FastAPI, Go, Kafka, and a Next.js dashboard. It demonstrates REST-to-gRPC bridging, iModern Event-Driven Orchestration with gRPC, Kafka, CDC, and Flink.
+
+- **High-Performance gRPC**: Low-latency communication between Gateway and Services.
+- **Real-time Order Status**: Updates via Kafka + gRPC streaming + SSE.
 
 ## Highlights
 - **Multi-Replica Raft Cluster**: Distributed leader election and state management using `etcd`.
@@ -34,7 +37,7 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Elasticvue**: Integrated UI for real-time Elasticsearch exploration and cluster management.
 - **ML Feature Store (DuckDB + Feast)**: Localized feature extraction and persistence for ML training and inference.
 - **Resilience Strategy (DLQ & Replay)**: Implementation of Dead Letter Queues with exponential backoff and idempotent replay for all core services.
-- **Admin Visibility**: Kafka UI, **Flink UI**, **Elasticvue**, **DLQ Monitor**, **RedisInsight**, and **Redis Commander**.
+- **Admin Visibility**: Kafka UI, **Flink UI**, **Elasticvue**, **DLQ Monitor**, **RedisInsight**, **Redis Commander**, and **Schema Registry**.
 - **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
 ## Architecture (Raft Cluster + Multi-Replica CDC)
 
@@ -70,6 +73,7 @@ flowchart TD
     subgraph "CDC Pipeline"
         Debezium[Debezium Connector]
         Kafka[(Kafka)]
+        SR[Schema Registry]
     end
 
     subgraph "Analytics & Search Pipeline"
@@ -109,6 +113,11 @@ flowchart TD
     Debezium -->|Events| Kafka
     Kafka -->|Async Rep| Inventory
     Inventory -->|Apply Changes| Replica2
+    
+    %% Event Versioning
+    SR <-->|Schema Validation| Kafka
+    Inventory <-->|Fetch Schema| SR
+    OrderService <-->|Register Schema| SR
 
     %% Analytics Flow
     Kafka -->|Stream| Flink
@@ -144,7 +153,18 @@ The system incorporates a robust analytics pipeline that processes order events 
     - **ClickHouse**: Optimized for BI dashboards and fast analytical queries.
     - **Elasticsearch**: Powering sub-second order search and discovery.
     - **DuckDB**: Serving as a local feature store for ML model inference.
+
 - **Monitoring**: Use **Flink UI** (`:8081`) to monitor job health and **Elasticvue** (`:8084`) to explore search indices.
+
+## Event Versioning & Schema Registry
+
+The system uses the **Confluent Schema Registry** to manage Protobuf schemas, ensuring data consistency across disparate services.
+
+- **Backward Compatibility**: Allows evolving schemas without breaking existing consumers.
+- **Serialization Control**: Centralized schema management prevents payload corruption.
+- **Kafka-UI Integration**: View registered schemas directly at `http://localhost:8080/schema-registry`.
+
+For detailed evolution rules, see [Event Versioning Guide](docs/event_versioning.md).
 
 ## Setup Guide: Enabling CDC (Neon Postgres)
 
@@ -257,6 +277,7 @@ The system utilizes a high-performance caching layer in the `inventory-service` 
 | **RedisInsight** | `http://localhost:8003` | Native Redis UI for memory analysis and profiling. |
 | **Redis Commander** | `http://localhost:8081` | Web-based Redis key management. |
 | **DLQ Monitor** | `http://localhost:8086` | View events in Dead Letter Queues. |
+| **Schema Registry** | `http://localhost:8081` | REST API for schema management. |
 | **Envoy Admin** | `http://localhost:9901` | Traffic distribution metrics & cluster health. |
 | **Prometheus** | `http://localhost:9090` | Raw metrics and service target status. |
 

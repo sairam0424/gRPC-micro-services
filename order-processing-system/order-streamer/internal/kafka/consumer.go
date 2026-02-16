@@ -2,14 +2,16 @@ package kafka
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v5"
-	"github.com/segmentio/kafka-go"
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde"
+	"github.com/confluentinc/confluent-kafka-go/v2/schemaregistry/serde/protobuf"
+	eventsv1 "github.com/sairam0424/gRPC-micro-services/order-streamer/pkg/generated/events/v1"
 )
 
 type OrderItem struct {
@@ -28,87 +30,118 @@ type OrderEvent struct {
 }
 
 type Consumer struct {
-	reader          *kafka.Reader
+	consumer        *kafka.Consumer
 	dlqProducer     *Producer
 	Events          chan OrderEvent
+	deserializer    *protobuf.Deserializer
 	processedEvents sync.Map // Simple in-memory idempotency cache: eventID -> timestamp
 }
 
-func NewConsumer(brokers []string, topic, groupID string, dlqProducer *Producer) *Consumer {
+func NewConsumer(brokers []string, topic, groupID string, dlqProducer *Producer, schemaRegistryURL string) (*Consumer, error) {
+	c, err := kafka.NewConsumer(&kafka.ConfigMap{
+		"bootstrap.servers": brokers[0],
+		"group.id":          groupID,
+		"auto.offset.reset": "earliest",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create consumer: %w", err)
+	}
+
+	sr, err := schemaregistry.NewClient(schemaregistry.NewConfig(schemaRegistryURL))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create schema registry client: %w", err)
+	}
+
+	deser, err := protobuf.NewDeserializer(sr, serde.ValueSerde, protobuf.NewDeserializerConfig())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create protobuf deserializer: %w", err)
+	}
+
 	return &Consumer{
-		reader: kafka.NewReader(kafka.ReaderConfig{
-			Brokers:  brokers,
-			Topic:    topic,
-			GroupID:  groupID,
-			MinBytes: 10e3, // 10KB
-			MaxBytes: 10e6, // 10MB
-		}),
+		consumer:    c,
 		dlqProducer: dlqProducer,
 		Events:      make(chan OrderEvent, 100),
-	}
+		deserializer: deser,
+	}, nil
 }
 
-func (c *Consumer) Start(ctx context.Context) {
-	log.Printf("Starting Kafka consumer on topic: %s", c.reader.Config().Topic)
+func (c *Consumer) Start(ctx context.Context, topic string) {
+	if err := c.consumer.Subscribe(topic, nil); err != nil {
+		log.Printf("Failed to subscribe to topic %s: %v", topic, err)
+		return
+	}
+
+	log.Printf("Starting Kafka consumer on topic: %s", topic)
 	for {
-		m, err := c.reader.ReadMessage(ctx)
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			log.Printf("Error reading message: %v", err)
+		ev := c.consumer.Poll(100)
+		if ev == nil {
 			continue
 		}
 
-		// Retry logic with exponential backoff
-		operation := func() (struct{}, error) {
-			var event OrderEvent
-			if err := json.Unmarshal(m.Value, &event); err != nil {
-				return struct{}{}, backoff.Permanent(fmt.Errorf("poison pill: %w", err))
+		switch e := ev.(type) {
+		case *kafka.Message:
+			var eventObj eventsv1.OrderCreatedEvent
+			err := c.deserializer.DeserializeInto(*e.TopicPartition.Topic, e.Value, &eventObj)
+			if err != nil {
+				log.Printf("Deserialization failed: %v. Sending to DLQ...", err)
+				if c.dlqProducer != nil {
+					if dlqErr := c.dlqProducer.PublishDLQ(ctx, e.Value, err); dlqErr != nil {
+						log.Printf("CRITICAL: Failed to publish to DLQ: %v", dlqErr)
+					}
+				}
+				continue
+			}
+
+			// Map to internal OrderEvent
+			items := make([]OrderItem, len(eventObj.Items))
+			for i, item := range eventObj.Items {
+				items[i] = OrderItem{
+					ProductID: item.ProductId,
+					Quantity:  item.Quantity,
+					Price:     item.Price,
+				}
+			}
+
+			event := OrderEvent{
+				EventType:  eventObj.EventType,
+				OrderID:    eventObj.OrderId,
+				CustomerID: eventObj.CustomerId,
+				Status:     eventObj.Status,
+				Message:    eventObj.Message,
+				Items:      items,
 			}
 
 			// Idempotency check
-			eventID := event.OrderID
-			if eventID == "" {
-				eventID = fmt.Sprintf("%x", m.Value[:16])
-			}
-			if _, loaded := c.processedEvents.LoadOrStore(eventID, time.Now()); loaded {
-				log.Printf("Duplicate event ignored: %s", eventID)
-				return struct{}{}, nil
+			if _, loaded := c.processedEvents.LoadOrStore(event.OrderID, time.Now()); loaded {
+				log.Printf("Duplicate event ignored: %s", event.OrderID)
+				continue
 			}
 
 			log.Printf("Received event: %s (Status: %s)", event.OrderID, event.Status)
 			
 			select {
 			case c.Events <- event:
-				return struct{}{}, nil
 			case <-ctx.Done():
-				return struct{}{}, ctx.Err()
+				return
 			}
-		}
 
-		_, err = backoff.Retry(ctx, operation, backoff.WithMaxTries(3))
-		if err != nil {
-			log.Printf("Processing failed after retries: %v. Sending to DLQ...", err)
-			if c.dlqProducer != nil {
-				if dlqErr := c.dlqProducer.PublishDLQ(ctx, m.Value, err); dlqErr != nil {
-					log.Printf("CRITICAL: Failed to publish to DLQ: %v", dlqErr)
-				}
+		case kafka.Error:
+			log.Printf("Consumer error: %v", e)
+			if e.IsFatal() {
+				return
 			}
+		default:
+			// Ignore other event types
 		}
 	}
 }
 
 func (c *Consumer) Ping(ctx context.Context) error {
-	// Just check if we can dial the first broker
-	conn, err := kafka.DialContext(ctx, "tcp", c.reader.Config().Brokers[0])
-	if err != nil {
-		return err
-	}
-	conn.Close()
-	return nil
+	_, err := c.consumer.GetMetadata(nil, false, 2000)
+	return err
 }
 
 func (c *Consumer) Close() error {
-	return c.reader.Close()
+	c.deserializer.Close()
+	return c.consumer.Close()
 }

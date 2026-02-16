@@ -37,24 +37,30 @@ def setup_minio():
     access_key = os.getenv("MINIO_ROOT_USER", "admin")
     secret_key = os.getenv("MINIO_ROOT_PASSWORD", "strongpassword123")
     
-    logger.info(f"Connecting to MinIO at {endpoint} as ROOT to ensure buckets exist...")
-    s3 = boto3.client(
-        's3',
-        endpoint_url=endpoint,
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        config=Config(signature_version='s3v4'),
-        region_name='us-east-1'
-    )
-    
-    buckets = ['flink-checkpoints', 'ml-models', 'feature-store', 'raw-events']
-    for bucket in buckets:
-        try:
-            s3.head_bucket(Bucket=bucket)
-            logger.info(f"Bucket '{bucket}' already exists.")
-        except:
-            logger.info(f"Creating bucket '{bucket}'...")
-            s3.create_bucket(Bucket=bucket)
+    logger.info(f"Connecting to MinIO at {endpoint} as ROOT to ensure buckets exist (Timeout: 10s)...")
+    try:
+        s3 = boto3.client(
+            's3',
+            endpoint_url=endpoint,
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            config=Config(signature_version='s3v4', connect_timeout=10, retries={'max_attempts': 2}),
+            region_name='us-east-1'
+        )
+        
+        buckets = ['flink-checkpoints', 'ml-models', 'feature-store', 'raw-events']
+        for bucket in buckets:
+            try:
+                s3.head_bucket(Bucket=bucket)
+                logger.info(f"Bucket '{bucket}' already exists.")
+            except Exception as e:
+                logger.info(f"Creating bucket '{bucket}' because head_bucket failed: {e}")
+                try:
+                    s3.create_bucket(Bucket=bucket)
+                except Exception as create_err:
+                    logger.error(f"Failed to create bucket {bucket}: {create_err}")
+    except Exception as e:
+        logger.error(f"Could not connect to MinIO during startup: {e}. Flink checkpointing might fail if buckets are missing.")
 
 def main():
     logger.info("Starting High-Performance Analytics Pipeline...")
@@ -104,14 +110,10 @@ def main():
 
     kafka_brokers = os.getenv("KAFKA_BROKERS", "kafka:29092")
 
-    # 1. Kafka Source Table
+    # 1. Kafka Source Table (Raw format to handle Protobuf with Confluent header)
     t_env.execute_sql(f"""
-        CREATE TABLE order_events (
-            order_id STRING,
-            customer_id STRING,
-            event_type STRING,
-            status STRING,
-            message STRING,
+        CREATE TABLE order_events_raw (
+            payload BYTES,
             event_time TIMESTAMP(3) METADATA FROM 'timestamp',
             WATERMARK FOR event_time AS event_time - INTERVAL '5' SECOND
         ) WITH (
@@ -120,40 +122,58 @@ def main():
             'properties.bootstrap.servers' = '{kafka_brokers}',
             'properties.group.id' = 'analytics-group',
             'scan.startup.mode' = 'earliest-offset',
-            'format' = 'json'
+            'format' = 'raw'
         )
     """)
 
-    # 2. ClickHouse Sink (Analytics) - TEMPORARILY DISABLED
-    # Keeping this section for future re-integration once Kafka -> Elasticsearch flow is verified
-    # try:
-    #     clickhouse_host = os.getenv("CLICKHOUSE_CLOUD_HOST", "clickhouse")
-    #     clickhouse_port = os.getenv("CLICKHOUSE_CLOUD_PORT", "8123")
-    #     clickhouse_user = os.getenv("CLICKHOUSE_CLOUD_USER", "default")
-    #     clickhouse_password = os.getenv("CLICKHOUSE_CLOUD_PASSWORD", "")
-    #     
-    #     use_ssl = "true" if clickhouse_port == "8443" else "false"
-    #
-    #     # Using the official ClickHouse Flink Connector
-    #     t_env.execute_sql(f"""
-    #         CREATE TABLE clickhouse_sink (
-    #             customer_id STRING,
-    #             order_count BIGINT,
-    #             last_event_time TIMESTAMP(3)
-    #         ) WITH (
-    #             'connector' = 'clickhouse',
-    #             'url' = '{clickhouse_host}:{clickhouse_port}',
-    #             'username' = '{clickhouse_user}',
-    #             'password' = '{clickhouse_password}',
-    #             'database-name' = 'default',
-    #             'table-name' = 'order_analytics',
-    #             'use-ssl' = '{use_ssl}'
-    #         )
-    #     """)
-    #     logger.info("ClickHouse sink created successfully.")
-    # except Exception as e:
-    #     logger.warning(f"Could not create ClickHouse sink: {e}. Skipping...")
+    # --- Python UDF for Protobuf Parsing ---
+    from pyflink.table.expressions import col
+    from pyflink.table.udf import udf
 
+    @udf(result_type=DataTypes.ROW([
+        DataTypes.FIELD("order_id", DataTypes.STRING()),
+        DataTypes.FIELD("customer_id", DataTypes.STRING()),
+        DataTypes.FIELD("event_type", DataTypes.STRING()),
+        DataTypes.FIELD("status", DataTypes.STRING()),
+        DataTypes.FIELD("message", DataTypes.STRING())
+    ]))
+    def parse_protobuf_event(data):
+        from generated.events.v1 import events_pb2
+        try:
+            # Strip 5-byte Confluent header: [magic_byte][schema_id]
+            if len(data) < 5:
+                return None
+            protobuf_payload = data[5:]
+            event = events_pb2.OrderCreatedEvent()
+            event.ParseFromString(protobuf_payload)
+            return (
+                event.order_id,
+                event.customer_id,
+                event.event_type,
+                event.status,
+                event.message
+            )
+        except Exception as e:
+            logger.error(f"UDF Error parsing protobuf: {e}")
+            return None
+
+    t_env.create_temporary_system_function("parse_protobuf_event", parse_protobuf_event)
+
+    # Create a view that uses the UDF to parse the raw payload
+    t_env.execute_sql("""
+        CREATE VIEW order_events AS
+        SELECT 
+            parsed.order_id,
+            parsed.customer_id,
+            parsed.event_type,
+            parsed.status,
+            parsed.message,
+            event_time
+        FROM (
+            SELECT parse_protobuf_event(payload) as parsed, event_time
+            FROM order_events_raw
+        )
+    """)
 
     # 3. Elasticsearch Sink (Local or Cloud)
     es_host = os.getenv("ELASTICSEARCH_HOST", "elasticsearch")
@@ -166,7 +186,6 @@ def main():
     # Try Cloud if configured and reachable
     if es_api_key and es_cloud_endpoint:
         logger.info(f"Preference: Cloud Elasticsearch at {es_cloud_endpoint}. Starting connectivity check with retries...")
-        # ES Cloud often takes a moment to respond or might be cold, so 3 retries with 5s delay is safer
         if check_connectivity(es_cloud_endpoint, timeout=10, retries=3, delay=5):
             logger.info("Cloud Elasticsearch is reachable. Using Cloud sink.")
             es_sink_config = f"""
@@ -205,61 +224,6 @@ def main():
     except Exception as e:
         logger.warning(f"Could not create Elasticsearch sink: {e}. Skipping...")
 
-    # 7. Local File Sink (Fallback) - DISABLED FOR ISOLATION
-    # try:
-    #     t_env.execute_sql(f"""
-    #         CREATE TABLE local_csv_sink (
-    #             order_id STRING,
-    #             customer_id STRING,
-    #             status STRING,
-    #             message STRING
-    #         ) WITH (
-    #             'connector' = 'filesystem',
-    #             'path' = 'file:///app/order_analytics.csv',
-    #             'format' = 'csv'
-    #         )
-    #     """)
-    #     logger.info("Local CSV sink created.")
-    # except Exception as e:
-    #     logger.warning(f"Could not create local CSV sink: {e}")
-
-    # 8. ML Features Sink (S3 or Local Fallback)
-    # ml_sink_path = os.getenv("ML_SINK_PATH", "s3a://ml-features/orders/")
-    # try:
-    #     t_env.execute_sql(f"""
-    #         CREATE TABLE ml_features_sink (
-    #             customer_id STRING,
-    #             order_count BIGINT,
-    #             last_order_time TIMESTAMP(3)
-    #         ) WITH (
-    #             'connector' = 'filesystem',
-    #             'path' = '{ml_sink_path}',
-    #             'format' = 'csv',
-    #             'sink.rolling-policy.rollover-interval' = '1 min',
-    #             'sink.rolling-policy.check-interval' = '1 min'
-    #         )
-    #     """)
-    #     logger.info(f"ML features sink created at {ml_sink_path}")
-    # except Exception as e:
-    #     logger.warning(f"Could not create ML features sink at {ml_sink_path}: {e}")
-    #     # Final fallback to local if S3 fails
-    #     if "s3" in ml_sink_path.lower():
-    #         try:
-    #             logger.info("Attempting local fallback for ML features sink...")
-    #             t_env.execute_sql(f"""
-    #                 CREATE TABLE ml_features_sink_local (
-    #                     customer_id STRING,
-    #                     order_count BIGINT,
-    #                     last_order_time TIMESTAMP(3)
-    #                 ) WITH (
-    #                     'connector' = 'filesystem',
-    #                     'path' = 'file:///app/ml_features.csv',
-    #                     'format' = 'csv'
-    #                 )
-    #             """)
-    #         except: pass
-
-
     # 5. Dead Letter Queue Sink (Kafka)
     t_env.execute_sql(f"""
         CREATE TABLE analytics_dlq (
@@ -278,21 +242,7 @@ def main():
     # --- Executing Pipeline via StatementSet for Unified Visibility ---
     statement_set = t_env.create_statement_set()
     
-    # Track which sinks were successfully created
     active_sinks = set(t_env.list_tables())
-
-    # ClickHouse Sink Insertion
-    # if "clickhouse_sink" in active_sinks:
-    #     try:
-    #         logger.info("Adding ClickHouse insertion to statement set.")
-    #         statement_set.add_insert_sql("""
-    #             INSERT INTO clickhouse_sink
-    #             SELECT customer_id, COUNT(order_id), MAX(event_time)
-    #             FROM order_events
-    #             GROUP BY customer_id
-    #         """)
-    #     except Exception as e:
-    #         logger.warning(f"Error adding ClickHouse insertion: {e}")
 
     # Elasticsearch Sink Insertion
     if "elasticsearch_sink" in active_sinks:
@@ -307,33 +257,6 @@ def main():
         except Exception as e:
             logger.warning(f"Error adding Elasticsearch insertion: {e}")
 
-    # Local CSV Sink Insertion - DISABLED
-    # if "local_csv_sink" in active_sinks:
-    #     try:
-    #         logger.info("Adding local CSV insertion to statement set.")
-    #         statement_set.add_insert_sql("""
-    #             INSERT INTO local_csv_sink
-    #             SELECT order_id, customer_id, status, message
-    #             FROM order_events
-    #         """)
-    #     except Exception as e:
-    #         logger.warning(f"Error adding local CSV insertion: {e}")
-
-    # ML Features Sink Insertion (S3 or Local)
-    ml_sink_to_use = "ml_features_sink" if "ml_features_sink" in active_sinks else "ml_features_sink_local" if "ml_features_sink_local" in active_sinks else None
-    
-    # if ml_sink_to_use:
-    #     try:
-    #         logger.info(f"Adding ML features insertion to statement set using {ml_sink_to_use}.")
-    #         statement_set.add_insert_sql(f"""
-    #             INSERT INTO {ml_sink_to_use}
-    #             SELECT customer_id, COUNT(order_id), MAX(event_time)
-    #             FROM order_events
-    #             GROUP BY customer_id
-    #         """)
-    #     except Exception as e:
-    #         logger.warning(f"Error adding ML features insertion: {e}")
-
     # Add Dead Letter Queue Sink for invalid events
     if "analytics_dlq" in active_sinks:
         statement_set.add_insert_sql("""
@@ -345,12 +268,14 @@ def main():
 
     logger.info("Submitting unified Flink job: Order Analytics Pipeline")
     try:
-        statement_set.execute().wait() # Wait for submission (not necessarily job completion in streaming)
+        statement_set.execute().wait() # Wait for submission
     except Exception as e:
         logger.error(f"Failed to execute Flink job: {e}")
-        # Log available tables for debugging
         logger.info(f"Available tables at failure: {t_env.list_tables()}")
         raise e
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
