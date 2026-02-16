@@ -1,28 +1,34 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.24-bookworm AS builder
 
 # Install build tools
-RUN apk add --no-cache git && \
+RUN apt-get update && apt-get install -y \
+    git \
+    build-essential \
+    librdkafka-dev \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/* && \
     go install github.com/air-verse/air@v1.61.1
 
 WORKDIR /app
 
-# Download dependencies with cache mount
+# Download dependencies
 COPY go.mod go.sum ./
-RUN --mount=type=cache,target=/go/pkg/mod \
-    go mod download
+RUN go mod download
 
-# Copy source code and build with cache mounts
+# Copy source code and build
 COPY . .
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o order-streamer cmd/server/main.go
+RUN GOOS=linux go build -ldflags="-s -w" -o order-streamer cmd/server/main.go
 
 # Final stage
-FROM alpine:3.19
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y \
+    librdkafka1 \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Security: Run as non-root user
-RUN adduser -D appuser
+RUN useradd -m appuser
 WORKDIR /app
 
 # Copy only the compiled binary

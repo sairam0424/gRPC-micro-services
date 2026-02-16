@@ -45,8 +45,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install -r requirements.txt
+RUN uv pip install -r requirements.txt
 
 COPY src/ /app/src/
 
