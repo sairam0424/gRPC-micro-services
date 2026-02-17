@@ -12,14 +12,16 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-# Download dependencies with cache mount
-COPY go.mod ./
-# COPY go.sum ./
+# Download dependencies
+COPY order-service/go.mod ./
+# Copy saga-orchestrator for the replacement
+COPY saga-orchestrator/ ../saga-orchestrator/
+
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
-# Copy source code and build with cache mounts for compiler and modules
-COPY . .
+# Copy source code and build
+COPY order-service/ .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
     GOOS=linux go build -ldflags="-s -w" -o main cmd/server/main.go

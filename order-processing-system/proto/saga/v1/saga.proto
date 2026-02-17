@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package saga.v1;
+
+option go_package = "github.com/sairam0424/gRPC-micro-services/saga-orchestrator/pkg/generated/saga/v1;sagav1";
+
+import "google/protobuf/struct.proto";
+
+service SagaService {
+  // Starts a new Saga workflow for an order
+  rpc StartOrderSaga(StartOrderSagaRequest) returns (StartOrderSagaResponse);
+  
+  // Queries the current status of a Saga workflow
+  rpc GetSagaStatus(GetSagaStatusRequest) returns (GetSagaStatusResponse);
+}
+
+message StartOrderSagaRequest {
+  string order_id = 1;
+  string customer_id = 2;
+  repeated OrderItem items = 3;
+}
+
+message OrderItem {
+  string product_id = 1;
+  int32 quantity = 2;
+  double price = 3;
+}
+
+message StartOrderSagaResponse {
+  string workflow_id = 1;
+  string status = 2;
+}
+
+message GetSagaStatusRequest {
+  string workflow_id = 1;
+}
+
+message GetSagaStatusResponse {
+  string workflow_id = 1;
+  string status = 2; // e.g., RUNNING, COMPLETED, FAILED, COMPENSATED
+  string current_task = 3;
+  google.protobuf.Struct output_data = 4;
+}
