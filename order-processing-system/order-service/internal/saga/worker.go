@@ -16,9 +16,21 @@ func HandleSagaCommand(p *ckafka.Producer, msg *ckafka.Message) {
 		return
 	}
 
-	sagaID := command["sagaId"].(string)
-	orderID := command["orderId"].(string)
-	cmdType := command["command"].(string)
+	sagaID, ok := command["sagaId"].(string)
+	if !ok {
+		log.Printf("Failed to extract sagaId from saga command")
+		return
+	}
+	orderID, ok := command["orderId"].(string)
+	if !ok {
+		log.Printf("Failed to extract orderId from saga command")
+		return
+	}
+	cmdType, ok := command["command"].(string)
+	if !ok {
+		log.Printf("Failed to extract command type from saga command")
+		return
+	}
 
 	log.Printf("Order Service: Handling Saga command %s for Saga %s", cmdType, sagaID)
 
