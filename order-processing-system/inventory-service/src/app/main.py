@@ -157,10 +157,10 @@ async def lifespan(app: FastAPI):
     
     app.state.kafka = KafkaManager(
         kafka_brokers, 
-        "order-events", 
-        "inventory-events",
+        "data.order-events", 
+        "data.inventory-events",
         schema_registry_url,
-        topic_dlq="inventory.dlq"
+        topic_dlq="data.inventory.dlq"
     )
     # Start Kafka consumer in a background thread (it's a blocking synchronous loop)
     kafka_thread = threading.Thread(target=app.state.kafka.start, daemon=True)
@@ -186,8 +186,8 @@ async def lifespan(app: FastAPI):
     from .saga_manager import SagaManager
     app.state.saga = SagaManager(
         kafka_brokers,
-        "saga-commands",
-        "saga-events"
+        "ctrl.saga-commands",
+        "ctrl.saga-events"
     )
     saga_thread = threading.Thread(target=app.state.saga.start, daemon=True)
     saga_thread.start()
