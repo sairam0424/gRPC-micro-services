@@ -39,6 +39,12 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Resilience Strategy (DLQ & Replay)**: Implementation of Dead Letter Queues with exponential backoff and idempotent replay for all core services.
 - **Admin Visibility**: Kafka UI, **Flink UI**, **Elasticvue**, **DLQ Monitor**, **RedisInsight**, **Redis Commander**, and **Schema Registry**.
 - **Advanced Caching**: Redis-based **Event-Driven Invalidation** and **Asynchronous Warming**.
+- **Architectural Plane Isolation**: Deep separation of **Control Plane** (Governance) and **Data Plane** (Execution) with 4 levels of isolation:
+  - **Network**: `internal-control-network` vs `public-data-network`.
+  - **Resource**: Strict CPU/Memory quotas for all containers.
+  - **Failure**: Graceful degradation (e.g., Schema caching if Registry fails).
+  - **Data**: Logical Kafka topic separation (`data.*` vs `ctrl.*`).
+
 ## Architecture (Raft Cluster + Multi-Replica CDC)
 
 ```mermaid
@@ -229,6 +235,7 @@ Base URL: `http://localhost/api`
 - `GET /api/health` -> API Gateway (Dependency health summary)
 
 Example (create order):
+
 ```bash
 curl -X POST http://localhost/api/orders \
   -H "Content-Type: application/json" \
@@ -301,6 +308,7 @@ To run the entire stack and see the system in action:
    Open monitoring tools using `make jaeger`, `make grafana`, or `make kafka-ui`.
 
 ## Quick Start (Docker)
+
 ```bash
 # from repo root
 cd order-processing-system
