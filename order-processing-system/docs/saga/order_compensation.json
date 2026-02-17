@@ -1,0 +1,28 @@
+{
+  "name": "order_compensation",
+  "description": "Compensation Saga for Order Failure",
+  "version": 1,
+  "tasks": [
+    {
+      "name": "release_stock_task",
+      "taskReferenceName": "release_stock_ref",
+      "type": "SIMPLE",
+      "inputParameters": {
+        "orderId": "${workflow.input.orderId}",
+        "items": "${workflow.input.items}"
+      }
+    },
+    {
+      "name": "fail_order_task",
+      "taskReferenceName": "fail_order_ref",
+      "type": "SIMPLE",
+      "inputParameters": {
+        "orderId": "${workflow.input.orderId}",
+        "reason": "${workflow.input.failureReason}"
+      }
+    }
+  ],
+  "restartable": true,
+  "workflowStatusListenerEnabled": true,
+  "schemaVersion": 2
+}

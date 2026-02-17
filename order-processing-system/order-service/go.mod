@@ -4,11 +4,12 @@ go 1.24.3
 
 require (
 	github.com/confluentinc/confluent-kafka-go/v2 v2.13.0
+	github.com/sairam0424/gRPC-micro-services/saga-orchestrator v0.0.0-00010101000000-000000000000
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.65.0
 	go.opentelemetry.io/otel v1.40.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.40.0
 	go.opentelemetry.io/otel/sdk v1.40.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.11
 	gorm.io/driver/postgres v1.6.0
 	gorm.io/gorm v1.31.1
@@ -45,3 +46,5 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
 )
+
+replace github.com/sairam0424/gRPC-micro-services/saga-orchestrator => ../saga-orchestrator
