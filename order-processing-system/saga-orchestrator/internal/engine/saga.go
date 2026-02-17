@@ -105,9 +105,21 @@ func (e *SagaEngine) handleEvent(ctx context.Context, msg *kafka.Message) {
 		return
 	}
 
-	sagaID := event["sagaId"].(string)
-	status := event["status"].(string)
-	command := event["command"].(string)
+	sagaID, ok := event["sagaId"].(string)
+	if !ok {
+		log.Printf("Saga Engine: Missing or invalid sagaId in event")
+		return
+	}
+	status, ok := event["status"].(string)
+	if !ok {
+		log.Printf("Saga Engine: Missing or invalid status in event")
+		return
+	}
+	command, ok := event["command"].(string)
+	if !ok {
+		log.Printf("Saga Engine: Missing or invalid command in event")
+		return
+	}
 
 	instance, err := e.GetSaga(ctx, sagaID)
 	if err != nil {
