@@ -181,6 +181,17 @@ async def lifespan(app: FastAPI):
     
     # Start gRPC server as background task
     asyncio.create_task(run_grpc_server())
+
+    # Start Saga Manager for Kafka orchestration
+    from .saga_manager import SagaManager
+    app.state.saga = SagaManager(
+        kafka_brokers,
+        "saga-commands",
+        "saga-events"
+    )
+    saga_thread = threading.Thread(target=app.state.saga.start, daemon=True)
+    saga_thread.start()
+    logger.info("Saga Manager (Inventory) started in background thread")
     
     yield
     

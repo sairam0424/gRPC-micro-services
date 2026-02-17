@@ -23,6 +23,7 @@ import (
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/models"
 	eventsv1 "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1"
 	orderv1 "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1"
+	sagav1 "github.com/sairam0424/gRPC-micro-services/saga-orchestrator/pkg/generated/saga/v1"
 	"gorm.io/gorm"
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
@@ -31,6 +32,8 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/sairam0424/gRPC-micro-services/order-service/internal/saga"
 )
 
 func initTracer() (*sdktrace.TracerProvider, error) {
@@ -63,6 +66,7 @@ type server struct {
 	orderv1.UnimplementedOrderServiceServer
 	inventoryClient *inventory.Client
 	kafkaProducer   *kafka.Producer
+	sagaClient     sagav1.SagaServiceClient
 }
 
 func (s *server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderRequest) (*orderv1.CreateOrderResponse, error) {
@@ -136,7 +140,29 @@ func (s *server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderReques
 		return nil, status.Errorf(codes.Internal, "failed to create order and outbox: %v", err)
 	}
 
-	log.Printf("Created order: %s and outbox record for customer: %s", orderID, req.CustomerId)
+	// 3. Delegate Saga Orchestration to Dedicated Service
+	sagaItems := make([]*sagav1.OrderItem, 0, len(req.Items))
+	for _, item := range req.Items {
+		sagaItems = append(sagaItems, &sagav1.OrderItem{
+			ProductId: item.ProductId,
+			Quantity:  item.Quantity,
+			Price:     item.Price,
+		})
+	}
+
+	sagaReq := &sagav1.StartOrderSagaRequest{
+		OrderId:    orderID,
+		CustomerId: req.CustomerId,
+		Items:      sagaItems,
+	}
+
+	sagaResp, err := s.sagaClient.StartOrderSaga(ctx, sagaReq)
+	if err != nil {
+		log.Printf("Failed to start Saga orchestration: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to start Saga orchestration: %v", err)
+	}
+
+	log.Printf("Created order: %s and initiated Saga: %s", orderID, sagaResp.WorkflowId)
 	return &orderv1.CreateOrderResponse{
 		OrderId: orderID,
 		Status:  orderv1.OrderStatus_ORDER_STATUS_PENDING,
@@ -251,6 +277,61 @@ func main() {
 	go consumer.Start(context.Background(), "inventory-events")
 	defer consumer.Close()
 
+	sagaAddr := os.Getenv("SAGA_ORCHESTRATOR_ADDR")
+	if sagaAddr == "" {
+		sagaAddr = "saga-orchestrator:50054"
+	}
+
+	sagaConn, err := grpc.Dial(sagaAddr, grpc.WithInsecure())
+	if err != nil {
+		log.Fatalf("failed to connect to saga orchestrator: %v", err)
+	}
+	defer sagaConn.Close()
+	sagaClient := sagav1.NewSagaServiceClient(sagaConn)
+
+	// Conductor Workers still needed for local database updates
+	// Saga Orchestration via Kafka
+	kafkaBrokers = os.Getenv("KAFKA_BROKERS")
+	if kafkaBrokers == "" {
+		kafkaBrokers = "kafka:29092"
+	}
+
+	log.Printf("Initializing Saga Consumer at %s", kafkaBrokers)
+	c, err := ckafka.NewConsumer(&ckafka.ConfigMap{
+		"bootstrap.servers": kafkaBrokers,
+		"group.id":          "order-service-saga",
+		"auto.offset.reset": "earliest",
+	})
+	if err != nil {
+		log.Fatalf("Failed to create Kafka consumer: %v", err)
+	}
+
+	if err = c.SubscribeTopics([]string{"saga-commands"}, nil); err != nil {
+		log.Fatalf("Failed to subscribe to saga-commands: %v", err)
+	}
+
+	// We need a producer to send results back to saga-events
+	p, err := ckafka.NewProducer(&ckafka.ConfigMap{"bootstrap.servers": kafkaBrokers})
+	if err != nil {
+		log.Fatalf("Failed to create Kafka producer: %v", err)
+	}
+
+	go func() {
+		for {
+			ev := c.Poll(100)
+			if ev == nil {
+				continue
+			}
+
+			switch e := ev.(type) {
+			case *ckafka.Message:
+				saga.HandleSagaCommand(p, e)
+			case ckafka.Error:
+				log.Printf("Kafka error: %v", e)
+			}
+		}
+	}()
+
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -262,6 +343,7 @@ func main() {
 	srv := &server{
 		inventoryClient: invClient,
 		kafkaProducer:   producer,
+		sagaClient:      sagaClient,
 	}
 
 	orderv1.RegisterOrderServiceServer(s, srv)
