@@ -11,4 +11,5 @@ type Outbox struct {
 	EventType     string
 	Payload       []byte    `gorm:"type:bytea"` // Binary payload (Protobuf)
 	CreatedAt     time.Time `gorm:"index"`
+	ProcessedAt   *time.Time `gorm:"index"`
 }
