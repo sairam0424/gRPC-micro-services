@@ -1,0 +1,28 @@
+{
+  "name": "order_fulfillment",
+  "description": "Orchestrated Saga for Order Fulfillment",
+  "version": 1,
+  "tasks": [
+    {
+      "name": "reserve_stock_task",
+      "taskReferenceName": "reserve_stock_ref",
+      "type": "SIMPLE",
+      "inputParameters": {
+        "orderId": "${workflow.input.orderId}",
+        "items": "${workflow.input.items}"
+      }
+    },
+    {
+      "name": "complete_order_task",
+      "taskReferenceName": "complete_order_ref",
+      "type": "SIMPLE",
+      "inputParameters": {
+        "orderId": "${workflow.input.orderId}"
+      }
+    }
+  ],
+  "failureWorkflow": "order_compensation",
+  "restartable": true,
+  "workflowStatusListenerEnabled": true,
+  "schemaVersion": 2
+}

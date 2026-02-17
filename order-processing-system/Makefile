@@ -7,6 +7,7 @@ tidy:
 	@echo "Tidying Go modules..."
 	cd order-service && go mod tidy
 	cd order-streamer && go mod tidy
+	cd saga-orchestrator && go mod tidy
 
 generate:
 	@echo "Generating Python gRPC code..."
@@ -47,6 +48,15 @@ generate:
 		--openapiv2_out=order-service/pkg/generated \
 		proto/order/v1/order.proto proto/inventory/v1/inventory.proto proto/stream/v1/stream.proto \
 		proto/events/v1/events.proto
+	
+	mkdir -p saga-orchestrator/pkg/generated
+	export PATH=$$PATH:$$(go env GOPATH)/bin && \
+		protoc \
+		-Iproto \
+		-I. \
+		--go_out=saga-orchestrator/pkg/generated --go_opt=paths=source_relative \
+		--go-grpc_out=saga-orchestrator/pkg/generated --go-grpc_opt=paths=source_relative \
+		proto/saga/v1/saga.proto
 	
 	mkdir -p order-streamer/pkg/generated
 	export PATH=$$PATH:$$(go env GOPATH)/bin && \
@@ -142,6 +152,9 @@ redis-insight:
 redis-commander:
 	open http://localhost:8082
 
+conductor-ui:
+	open http://localhost:5000
+
 flink-ui:
 	open http://localhost:8081
 
@@ -179,6 +192,9 @@ es-logs:
 
 cdc-logs:
 	docker compose -f docker-compose.dev.yml logs -f connect
+
+conductor-logs:
+	docker compose -f docker-compose.dev.yml logs -f conductor-server conductor-ui
 
 analytics-up:
 	docker compose -f docker-compose.dev.yml up -d flink-jobmanager flink-taskmanager clickhouse elasticsearch elasticvue minio minio-setup analytics-pipeline

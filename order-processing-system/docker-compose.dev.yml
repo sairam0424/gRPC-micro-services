@@ -2,8 +2,8 @@
 services:
   order-service:
     build:
-      context: ./order-service
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: order-service/Dockerfile
       target: builder
     volumes:
       - ./order-service:/app
@@ -576,6 +576,28 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+
+
+  saga-orchestrator:
+    build:
+      context: .
+      dockerfile: saga-orchestrator/Dockerfile
+    ports:
+      - "50054:50054"
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - CONDUCTOR_SERVER_URL= # Removed
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - grpc-net
 
   flink-jobmanager:
     image: flink:1.18.1-java11

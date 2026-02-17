@@ -18,7 +18,9 @@ RUN go mod download
 
 # Copy source code and build
 COPY . .
-RUN GOOS=linux go build -ldflags="-s -w" -o order-streamer cmd/server/main.go
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 GOOS=linux go build -ldflags="-s -w" -o order-streamer cmd/server/main.go
 
 # Final stage
 FROM debian:bookworm-slim
