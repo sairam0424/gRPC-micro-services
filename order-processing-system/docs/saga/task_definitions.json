@@ -1,0 +1,61 @@
+[
+  {
+    "name": "reserve_stock",
+    "retryCount": 3,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 10,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 180,
+    "inputKeys": [
+      "orderId",
+      "items"
+    ],
+    "outputKeys": [
+      "status"
+    ]
+  },
+  {
+    "name": "release_stock",
+    "retryCount": 3,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 10,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 180,
+    "inputKeys": [
+      "orderId",
+      "items"
+    ],
+    "outputKeys": [
+      "status"
+    ]
+  },
+  {
+    "name": "complete_order",
+    "retryCount": 3,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 10,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 180,
+    "inputKeys": [
+      "orderId"
+    ],
+    "outputKeys": [
+      "status"
+    ]
+  },
+  {
+    "name": "fail_order",
+    "retryCount": 3,
+    "retryLogic": "FIXED",
+    "retryDelaySeconds": 10,
+    "timeoutSeconds": 300,
+    "responseTimeoutSeconds": 180,
+    "inputKeys": [
+      "orderId",
+      "reason"
+    ],
+    "outputKeys": [
+      "status"
+    ]
+  }
+]
