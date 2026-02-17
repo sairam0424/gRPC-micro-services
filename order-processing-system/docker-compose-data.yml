@@ -7,8 +7,8 @@ services:
       target: builder
     volumes:
       - ./order-service:/app
-      - go-cache:/go/pkg/mod
-      - go-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
     ports:
       - "50051:50051"
     environment:
@@ -37,6 +37,8 @@ services:
       inventory-service:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      schema-registry:
         condition: service_healthy
 
   api-gateway-1:
@@ -182,6 +184,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      schema-registry:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -200,8 +204,8 @@ services:
       - "50053:50053"
     volumes:
       - ./order-streamer:/app
-      - go-cache:/go/pkg/mod
-      - go-cache:/root/.cache/go-build
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
     environment:
       - KAFKA_BROKERS=kafka:29092
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
@@ -329,7 +333,7 @@ services:
     networks:
       - public-data-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep -q PONG || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -407,9 +411,12 @@ services:
       - ELASTICSEARCH_HOST=elasticsearch
       - KAFKA_TOPIC_IN=data.order-events
     depends_on:
-      - kafka
-      - clickhouse
-      - elasticsearch
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -428,4 +435,6 @@ volumes:
   elasticsearch-data:
   clickhouse-data:
   minio-data:
+  go-mod-cache:
+  go-build-cache:
   go-cache:

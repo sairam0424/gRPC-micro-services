@@ -112,7 +112,7 @@ test-resilience:
 
 logs:
 	@echo "Showing logs from both planes..."
-	docker compose -f docker-compose-data.yml logs -f & docker compose -f docker-compose-control.yml logs -f
+	docker compose -f docker-compose-data.yml -f docker-compose-control.yml logs -f
 
 seed:
 	./scripts/seed_data.sh
