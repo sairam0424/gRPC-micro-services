@@ -418,8 +418,8 @@ func startOutboxRelay(ctx context.Context, db *gorm.DB, producer *kafka.Producer
 			return
 		case <-ticker.C:
 			var messages []models.Outbox
-			// Fetch up to 100 messages to process
-			if err := db.Order("created_at asc").Limit(100).Find(&messages).Error; err != nil {
+			// Fetch up to 100 unprocessed messages to process
+			if err := db.Where("processed_at IS NULL").Order("created_at asc").Limit(100).Find(&messages).Error; err != nil {
 				log.Printf("Outbox Relay: failed to fetch messages: %v", err)
 				continue
 			}
@@ -445,9 +445,10 @@ func startOutboxRelay(ctx context.Context, db *gorm.DB, producer *kafka.Producer
 					continue
 				}
 
-				// Success: remove from outbox
-				if err := db.Delete(&msg).Error; err != nil {
-					log.Printf("Outbox Relay: failed to delete message %d from outbox: %v", msg.ID, err)
+				// Success: mark as processed
+				now := time.Now()
+				if err := db.Model(&msg).Update("processed_at", &now).Error; err != nil {
+					log.Printf("Outbox Relay: failed to mark message %d as processed: %v", msg.ID, err)
 				}
 			}
 		}
