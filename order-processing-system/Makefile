@@ -82,18 +82,26 @@ clean:
 	rm -rf inventory-service/src/generated/*
 
 up:
-	docker compose up --build -d
+	docker network create public-data-network || true
+	docker network create internal-control-network || true
+	docker volume create etcd-data || true
+	docker compose -f docker-compose-data.yml -f docker-compose-control.yml up --build -d
 
 up-dev:
-# 	docker compose -f docker-compose.dev.yml build --parallel
-# 	docker compose -f docker-compose.dev.yml up
-	docker compose -f docker-compose.dev.yml up --build
+	docker network create public-data-network || true
+	docker network create internal-control-network || true
+	docker volume create etcd-data || true
+	docker compose -f docker-compose-data.yml -f docker-compose-control.yml up --build
+
+
 
 restart:
-	docker compose restart
+	docker compose -f docker-compose-data.yml restart
+	docker compose -f docker-compose-control.yml restart
 
 down:
-	docker compose down
+	docker compose -f docker-compose-control.yml down
+	docker compose -f docker-compose-data.yml down
 
 test:
 	./test_flow.sh
@@ -103,13 +111,18 @@ test-resilience:
 	python3 verify_resilience.py || echo "Note: verify_resilience.py may require httpx locally. If it fails, check logs in Docker."
 
 logs:
-	docker compose logs -f
+	@echo "Showing logs from both planes..."
+	docker compose -f docker-compose-data.yml -f docker-compose-control.yml logs -f
 
 seed:
 	./scripts/seed_data.sh
 
 status:
-	docker compose ps
+	@echo "--- DATA PLANE ---"
+	docker compose -f docker-compose-data.yml ps
+	@echo "--- CONTROL PLANE ---"
+	docker compose -f docker-compose-control.yml ps
+
 
 # Observability UIs (MacOS specific open command)
 jaeger:

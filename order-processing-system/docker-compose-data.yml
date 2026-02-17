@@ -1,0 +1,440 @@
+services:
+  # Business Execution
+  order-service:
+    build:
+      context: .
+      dockerfile: order-service/Dockerfile
+      target: builder
+    volumes:
+      - ./order-service:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    ports:
+      - "50051:50051"
+    environment:
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
+      - KAFKA_BROKERS=kafka:29092
+      - DATABASE_URL=${ORDER_DATABASE_URL}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8081
+      - KAFKA_TOPIC_ORDER_EVENTS=data.order-events
+    command: sh -c "air -c .air.toml"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - public-data-network
+      - internal-control-network # Needs Schema Registry
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      inventory-service:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+
+  api-gateway-1:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8101:8000"
+    volumes:
+      - ./api-gateway/src:/app/src
+    environment:
+      - ORDER_SERVICE_ADDR=order-service:50051
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
+      - STREAM_SERVICE_ADDR=order-streamer:50053
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      order-service:
+        condition: service_healthy
+      order-streamer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - public-data-network
+
+  api-gateway-2:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8102:8000"
+    volumes:
+      - ./api-gateway/src:/app/src
+    environment:
+      - ORDER_SERVICE_ADDR=order-service:50051
+      - INVENTORY_SERVICE_ADDR=inventory-service:50052
+      - STREAM_SERVICE_ADDR=order-streamer:50053
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      order-service:
+        condition: service_healthy
+      order-streamer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - public-data-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./auth-service/src:/app/src
+    environment:
+      - DATABASE_URL=${ORDER_DATABASE_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+      - PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8002 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8002/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - public-data-network
+
+  inventory-service:
+    build:
+      context: ./inventory-service
+      dockerfile: Dockerfile
+    ports:
+      - "50052:50052"
+    volumes:
+      - ./inventory-service/src:/app/src
+    env_file:
+      - .env
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - KAFKA_TOPIC_IN=data.order-events
+      - KAFKA_TOPIC_OUT=data.inventory-events
+      - KAFKA_TOPIC_DLQ=data.inventory-events.dlq
+      - SCHEMA_REGISTRY_URL=http://schema-registry:8081
+      - DATABASE_URL=${DATABASE_URL}
+      - REPLICA_DATABASE_URL=${REPLICA_DATABASE_URL}
+      - REPLICA2_DATABASE_URL=${REPLICA2_DATABASE_URL}
+      - ETCD_HOST=etcd
+      - ETCD_PORT=2379
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - OTEL_SERVICE_NAME=inventory-service
+      - PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    depends_on:
+      kafka:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      schema-registry:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - public-data-network
+      - internal-control-network # Needs Schema Registry and ETCD
+
+  order-streamer:
+    build:
+      context: ./order-streamer
+      dockerfile: Dockerfile
+      target: builder
+    ports:
+      - "50053:50053"
+    volumes:
+      - ./order-streamer:/app
+      - go-mod-cache:/go/pkg/mod
+      - go-build-cache:/root/.cache/go-build
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
+    command: sh -c "air -c .air.toml"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - public-data-network
+
+  web-client:
+    build:
+      context: ./web-client
+      target: development
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./web-client:/app
+      - /app/node_modules
+      - /app/.next
+    command: npm run dev
+    depends_on:
+      envoy:
+        condition: service_started
+      inventory-service:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - public-data-network
+
+  proxy:
+    image: nginx:alpine
+    volumes:
+      - ./proxy/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "8010:80"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+    depends_on:
+      - envoy
+      - web-client
+    networks:
+      - public-data-network
+
+  envoy:
+    image: envoyproxy/envoy:v1.29-latest
+    ports:
+      - "8085:80"
+      - "9901:9901"
+    volumes:
+      - ./proxy/envoy.yaml:/etc/envoy/envoy.yaml:ro
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    depends_on:
+      api-gateway-1:
+        condition: service_healthy
+      api-gateway-2:
+        condition: service_healthy
+    networks:
+      - public-data-network
+
+  # Data Infrastructure
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    ports:
+      - "9094:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    depends_on:
+      - zookeeper
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 2G
+    networks:
+      - public-data-network
+      - internal-control-network # Needs Zookeeper (Control Plane)
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 29092 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  redis:
+    image: redis/redis-stack:latest
+    ports:
+      - "6379:6379"
+      - "8003:8001"
+    environment:
+      - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - public-data-network
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep -q PONG || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 60s
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:7.17.10
+    ports:
+      - "9200:9200"
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 1G
+    networks:
+      - public-data-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    ports:
+      - "8123:8123"
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 1G
+    networks:
+      - public-data-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - public-data-network
+
+  analytics-pipeline:
+    build:
+      context: ./analytics-pipeline
+      dockerfile: Dockerfile
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - CLICKHOUSE_HOST=clickhouse
+      - ELASTICSEARCH_HOST=elasticsearch
+      - KAFKA_TOPIC_IN=data.order-events
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - public-data-network
+
+networks:
+  public-data-network:
+    external: true
+  internal-control-network:
+    external: true
+
+volumes:
+  elasticsearch-data:
+  clickhouse-data:
+  minio-data:
+  go-mod-cache:
+  go-build-cache:
+  go-cache:
