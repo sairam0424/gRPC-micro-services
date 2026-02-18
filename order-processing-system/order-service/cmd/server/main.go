@@ -395,8 +395,8 @@ func main() {
 
 			fmt.Fprintf(w, `{"status": "%s", "version": "0.1.0", "checks": {"database": "%s", "kafka": "%s"}}`, status, dbStatus, kafkaStatus)
 		})
-		log.Printf("Health check server listening at :8081")
-		if err := http.ListenAndServe(":8081", mux); err != nil {
+		log.Printf("Health check server listening at :8088")
+		if err := http.ListenAndServe(":8088", mux); err != nil {
 			log.Printf("Health check server failed: %v", err)
 		}
 	}()

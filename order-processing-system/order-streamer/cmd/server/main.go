@@ -199,8 +199,8 @@ func main() {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte("healthy"))
 		})
-		log.Printf("Health check server listening at :8082")
-		if err := http.ListenAndServe(":8082", nil); err != nil {
+		log.Printf("Health check server listening at :8089")
+		if err := http.ListenAndServe(":8089", nil); err != nil {
 			log.Printf("Health check server failed: %v", err)
 		}
 	}()
