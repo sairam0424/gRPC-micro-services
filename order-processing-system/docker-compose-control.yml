@@ -43,6 +43,12 @@ services:
     networks:
       - internal-control-network
       - public-data-network # Needs Kafka
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/subjects || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
 
   connect:
     image: debezium/connect:2.5
