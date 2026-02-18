@@ -246,8 +246,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.50'
+          memory: 1GB
     networks:
       - public-data-network
 
