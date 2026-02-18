@@ -96,8 +96,7 @@ up-dev:
 
 
 restart:
-	docker compose -f docker-compose-data.yml restart
-	docker compose -f docker-compose-control.yml restart
+	docker compose -f docker-compose-data.yml -f docker-compose-control.yml restart
 
 down:
 	docker compose -f docker-compose-control.yml down
