@@ -96,8 +96,7 @@ up-dev:
 
 
 restart:
-	docker compose -f docker-compose-data.yml restart
-	docker compose -f docker-compose-control.yml restart
+	docker compose -f docker-compose-data.yml -f docker-compose-control.yml restart
 
 down:
 	docker compose -f docker-compose-control.yml down
@@ -118,10 +117,7 @@ seed:
 	./scripts/seed_data.sh
 
 status:
-	@echo "--- DATA PLANE ---"
-	docker compose -f docker-compose-data.yml ps
-	@echo "--- CONTROL PLANE ---"
-	docker compose -f docker-compose-control.yml ps
+	docker compose -f docker-compose-data.yml -f docker-compose-control.yml ps
 
 
 # Observability UIs (MacOS specific open command)

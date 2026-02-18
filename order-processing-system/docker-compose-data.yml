@@ -28,7 +28,7 @@ services:
       - public-data-network
       - internal-control-network # Needs Schema Registry
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8081/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8088/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -211,7 +211,7 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
     command: sh -c "air -c .air.toml"
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:8082/health || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8089/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -246,8 +246,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.50'
+          memory: 1GB
     networks:
       - public-data-network
 
@@ -324,6 +324,7 @@ services:
       - "6379:6379"
       - "8003:8001"
     environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       - REDIS_ARGS=--requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
     deploy:
       resources:
@@ -333,7 +334,7 @@ services:
     networks:
       - public-data-network
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a $${REDIS_PASSWORD} ping | grep -q PONG || exit 1"]
+      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep -q PONG || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 5
