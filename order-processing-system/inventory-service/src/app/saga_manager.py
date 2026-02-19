@@ -90,6 +90,12 @@ class SagaManager:
                 req_items = [ItemReq(i.get('productId'), i.get('quantity')) for i in items_raw]
                 
                 async with writer_session() as session:
+                    # Idempotency Check
+                    command_id = f"saga:{saga_id}:{cmd_type}"
+                    if not await crud.check_and_record_event(session, command_id, "inventory-service"):
+                        logger.info(f"Duplicate saga command ignored: {command_id}")
+                        return
+
                     success, message, _ = await crud.reserve_stock_atomic(session, order_id, req_items)
                     if success:
                         result = {'status': 'RESERVED', 'message': message}
@@ -105,6 +111,12 @@ class SagaManager:
                 req_items = [ItemReq(i.get('productId'), i.get('quantity')) for i in items_raw]
                 
                 async with writer_session() as session:
+                    # Idempotency Check
+                    command_id = f"saga:{saga_id}:{cmd_type}"
+                    if not await crud.check_and_record_event(session, command_id, "inventory-service"):
+                        logger.info(f"Duplicate saga command ignored: {command_id}")
+                        return
+
                     await crud.release_stock_atomic(session, order_id, req_items)
                     result = {'status': 'RELEASED'}
             
