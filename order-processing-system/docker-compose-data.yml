@@ -150,7 +150,7 @@ services:
       context: ./inventory-service
       dockerfile: Dockerfile
     ports:
-      - "50052:50052"
+      - "50052:8001"
     volumes:
       - ./inventory-service/src:/app/src
     env_file:
@@ -318,6 +318,26 @@ services:
       retries: 5
       start_period: 60s
 
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - public-data-network
+      - internal-control-network
+    healthcheck:
+      test: ["CMD-SHELL", "echo srvr | nc localhost 2181 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   redis:
     image: redis/redis-stack:latest
     ports:
@@ -438,4 +458,3 @@ volumes:
   minio-data:
   go-mod-cache:
   go-build-cache:
-  go-cache:

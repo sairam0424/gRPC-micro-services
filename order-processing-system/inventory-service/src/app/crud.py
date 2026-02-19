@@ -34,6 +34,12 @@ async def reserve_stock_atomic(db: AsyncSession, order_id: str, items: list):
     Locks the rows using SELECT FOR UPDATE.
     """
     logger.info(f"Attempting atomic reservation for order {order_id}")
+    
+    # Idempotency Check
+    if not await check_and_record_event(db, f"reserve:{order_id}", "inventory-reserve"):
+        logger.info(f"Duplicate reservation request for order {order_id}. Skipping.")
+        return True, "Already reserved", []
+
     items_to_reserve = []
     
     for item_req in items:
@@ -46,10 +52,10 @@ async def reserve_stock_atomic(db: AsyncSession, order_id: str, items: list):
         db_item = result.scalar()
         
         if not db_item:
-            return False, f"Product {item_req.product_id} not found"
+            return False, f"Product {item_req.product_id} not found", []
         
         if db_item.quantity < item_req.quantity:
-            return False, f"Insufficient stock for {item_req.product_id}"
+            return False, f"Insufficient stock for {item_req.product_id}", []
             
         items_to_reserve.append((db_item, item_req.quantity))
     
@@ -63,15 +69,30 @@ async def reserve_stock_atomic(db: AsyncSession, order_id: str, items: list):
     return True, "Stock reserved successfully", items_to_reserve
 
 async def release_stock_atomic(db: AsyncSession, order_id: str, items: list):
-    """Restore stock levels."""
+    """Restore stock levels with validation."""
+    logger.info(f"Attempting atomic release for order {order_id}")
+    
+    # Idempotency Check
+    if not await check_and_record_event(db, f"release:{order_id}", "inventory-release"):
+        logger.info(f"Duplicate release request for order {order_id}. Skipping.")
+        return True
+
     for item_req in items:
-        await db.execute(
-            update(InventoryItem)
+        # Fetch with FOR UPDATE to ensure row existence and lock it
+        result = await db.execute(
+            select(InventoryItem)
             .where(InventoryItem.product_id == item_req.product_id)
-            .values(quantity=InventoryItem.quantity + item_req.quantity)
+            .with_for_update()
         )
+        db_item = result.scalar()
+        if not db_item:
+            logger.warning(f"Product {item_req.product_id} not found during release for order {order_id}")
+            continue # Or raise error? Sagas usually prefer continuing compensation if possible, but logging is vital.
+
+        db_item.quantity += item_req.quantity
         # Re-enable in-stock filter
         filter_manager.update_stock_status(item_req.product_id, True)
+    
     await db.commit()
     return True
 

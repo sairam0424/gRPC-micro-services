@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/database"
@@ -45,24 +46,30 @@ func HandleSagaCommand(p *ckafka.Producer, msg *ckafka.Message) {
 	err = database.DB.Transaction(func(tx *gorm.DB) error {
 		if !database.CheckAndRecordEvent(tx, eventID, "order-service") {
 			log.Printf("Duplicate saga command ignored: %s", eventID)
-			return nil // Already processed
+			// Return result matching existing state if possible
+			// For now, returning nil/nil is safe as publishSagaEvent will handle it
+			return nil
 		}
 
 		switch cmdType {
 		case "complete_order":
 			result, err = CompleteOrder(tx, orderID)
 		case "fail_order":
-			reason, _ := command["data"].(map[string]interface{})["reason"].(string)
+			var reason string
+			if data, ok := command["data"].(map[string]interface{}); ok && data != nil {
+				if r, rOk := data["reason"].(string); rOk {
+					reason = r
+				}
+			}
 			result, err = FailOrder(tx, orderID, reason)
 		default:
 			log.Printf("Unknown saga command: %s", cmdType)
-			return nil
+			return fmt.Errorf("unknown saga command: %s", cmdType)
 		}
 		return err
 	})
 
-	if err != nil && result == nil {
-		// If error occurred but result is nil, it means it wasn't a duplicate but failed
+	if err != nil {
 		log.Printf("Error processing saga command %s: %v", cmdType, err)
 	}
 
@@ -71,17 +78,23 @@ func HandleSagaCommand(p *ckafka.Producer, msg *ckafka.Message) {
 }
 
 func CompleteOrder(tx *gorm.DB, orderID string) (map[string]interface{}, error) {
-	err := tx.Model(&models.Order{}).Where("order_id = ?", orderID).Update("status", "COMPLETED").Error
-	if err != nil {
-		return nil, err
+	res := tx.Model(&models.Order{}).Where("order_id = ?", orderID).Update("status", "COMPLETED")
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, fmt.Errorf("order %s not found for completion", orderID)
 	}
 	return map[string]interface{}{"status": "COMPLETED"}, nil
 }
 
 func FailOrder(tx *gorm.DB, orderID string, reason string) (map[string]interface{}, error) {
-	err := tx.Model(&models.Order{}).Where("order_id = ?", orderID).Update("status", "FAILED").Error
-	if err != nil {
-		return nil, err
+	res := tx.Model(&models.Order{}).Where("order_id = ?", orderID).Update("status", "FAILED")
+	if res.Error != nil {
+		return nil, res.Error
+	}
+	if res.RowsAffected == 0 {
+		return nil, fmt.Errorf("order %s not found for failure", orderID)
 	}
 	return map[string]interface{}{"status": "FAILED", "reason": reason}, nil
 }
@@ -99,15 +112,37 @@ func publishSagaEvent(p *ckafka.Producer, sagaID, orderID, command string, resul
 		"command": command,
 		"status":  status,
 		"data":    result,
+		"timestamp": time.Now().UnixMilli(),
 	}
 	if err != nil {
 		payload["error"] = err.Error()
 	}
 
-	data, _ := json.Marshal(payload)
-	p.Produce(&ckafka.Message{
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Failed to marshal saga event: %v", err)
+		return
+	}
+
+	deliveryChan := make(chan ckafka.Event)
+	err = p.Produce(&ckafka.Message{
 		TopicPartition: ckafka.TopicPartition{Topic: &topic, Partition: ckafka.PartitionAny},
 		Value:          data,
 		Key:            []byte(sagaID),
-	}, nil)
+	}, deliveryChan)
+
+	if err != nil {
+		log.Printf("Failed to produce saga event: %v", err)
+		return
+	}
+
+	// Wait for delivery report
+	e := <-deliveryChan
+	m := e.(*ckafka.Message)
+	if m.TopicPartition.Error != nil {
+		log.Printf("Failed to deliver saga event to Kafka: %v", m.TopicPartition.Error)
+	} else {
+		log.Printf("Delivered saga event for %s to topic %s", sagaID, *m.TopicPartition.Topic)
+	}
+	close(deliveryChan)
 }

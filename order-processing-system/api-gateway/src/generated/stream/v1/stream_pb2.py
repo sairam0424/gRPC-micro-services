@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16stream/v1/stream.proto\x12\tstream.v1\"3\n\x1cSubscribeOrderUpdatesRequest\x12\x13\n\x0b\x63ustomer_id\x18\x01 \x01(\t\"@\n\tOrderItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\r\n\x05price\x18\x03 \x01(\x01\"\x80\x01\n\x11OrderStatusUpdate\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x02 \x01(\t\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x0f\n\x07message\x18\x04 \x01(\t\x12#\n\x05items\x18\x05 \x03(\x0b\x32\x14.stream.v1.OrderItem2q\n\rStreamService\x12`\n\x15SubscribeOrderUpdates\x12\'.stream.v1.SubscribeOrderUpdatesRequest\x1a\x1c.stream.v1.OrderStatusUpdate0\x01\x42PZNgithub.com/sairam0424/order-processing-system/pkg/generated/stream/v1;streampbb\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16stream/v1/stream.proto\x12\tstream.v1\"3\n\x1cSubscribeOrderUpdatesRequest\x12\x13\n\x0b\x63ustomer_id\x18\x01 \x01(\t\"F\n\tOrderItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\r\x12\x13\n\x0bprice_cents\x18\x03 \x01(\x03\"\x80\x01\n\x11OrderStatusUpdate\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x02 \x01(\t\x12\x0e\n\x06status\x18\x03 \x01(\t\x12\x0f\n\x07message\x18\x04 \x01(\t\x12#\n\x05items\x18\x05 \x03(\x0b\x32\x14.stream.v1.OrderItem2q\n\rStreamService\x12`\n\x15SubscribeOrderUpdates\x12\'.stream.v1.SubscribeOrderUpdatesRequest\x1a\x1c.stream.v1.OrderStatusUpdate0\x01\x42PZNgithub.com/sairam0424/order-processing-system/pkg/generated/stream/v1;streampbb\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -35,9 +35,9 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_SUBSCRIBEORDERUPDATESREQUEST']._serialized_start=37
   _globals['_SUBSCRIBEORDERUPDATESREQUEST']._serialized_end=88
   _globals['_ORDERITEM']._serialized_start=90
-  _globals['_ORDERITEM']._serialized_end=154
-  _globals['_ORDERSTATUSUPDATE']._serialized_start=157
-  _globals['_ORDERSTATUSUPDATE']._serialized_end=285
-  _globals['_STREAMSERVICE']._serialized_start=287
-  _globals['_STREAMSERVICE']._serialized_end=400
+  _globals['_ORDERITEM']._serialized_end=160
+  _globals['_ORDERSTATUSUPDATE']._serialized_start=163
+  _globals['_ORDERSTATUSUPDATE']._serialized_end=291
+  _globals['_STREAMSERVICE']._serialized_start=293
+  _globals['_STREAMSERVICE']._serialized_end=406
 # @@protoc_insertion_point(module_scope)

@@ -6,8 +6,8 @@ option go_package = "github.com/sairam0424/gRPC-micro-services/order-service/pkg
 
 message OrderItem {
   string product_id = 1;
-  int32 quantity = 2;
-  double price = 3;
+  uint32 quantity = 2;
+  int64 price_cents = 3;
 }
 
 message OrderCreatedEvent {
@@ -47,6 +47,6 @@ message InventoryUpdatedEvent {
   string event_id = 1;
   string event_type = 2;
   string product_id = 3;
-  int32 quantity = 4;
+  uint32 quantity = 4;
   int64 timestamp = 5;
 }

@@ -24,8 +24,8 @@ const (
 type OrderItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	Price         float64                `protobuf:"fixed64,3,opt,name=price,proto3" json:"price,omitempty"`
+	Quantity      uint32                 `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	PriceCents    int64                  `protobuf:"varint,3,opt,name=price_cents,json=priceCents,proto3" json:"price_cents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -67,16 +67,16 @@ func (x *OrderItem) GetProductId() string {
 	return ""
 }
 
-func (x *OrderItem) GetQuantity() int32 {
+func (x *OrderItem) GetQuantity() uint32 {
 	if x != nil {
 		return x.Quantity
 	}
 	return 0
 }
 
-func (x *OrderItem) GetPrice() float64 {
+func (x *OrderItem) GetPriceCents() int64 {
 	if x != nil {
-		return x.Price
+		return x.PriceCents
 	}
 	return 0
 }
@@ -386,7 +386,7 @@ type InventoryUpdatedEvent struct {
 	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
 	EventType     string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
 	ProductId     string                 `protobuf:"bytes,3,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	Quantity      int32                  `protobuf:"varint,4,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Quantity      uint32                 `protobuf:"varint,4,opt,name=quantity,proto3" json:"quantity,omitempty"`
 	Timestamp     int64                  `protobuf:"varint,5,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -443,7 +443,7 @@ func (x *InventoryUpdatedEvent) GetProductId() string {
 	return ""
 }
 
-func (x *InventoryUpdatedEvent) GetQuantity() int32 {
+func (x *InventoryUpdatedEvent) GetQuantity() uint32 {
 	if x != nil {
 		return x.Quantity
 	}
@@ -461,12 +461,13 @@ var File_events_v1_events_proto protoreflect.FileDescriptor
 
 const file_events_v1_events_proto_rawDesc = "" +
 	"\n" +
-	"\x16events/v1/events.proto\x12\tevents.v1\"\\\n" +
+	"\x16events/v1/events.proto\x12\tevents.v1\"g\n" +
 	"\tOrderItem\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity\x12\x14\n" +
-	"\x05price\x18\x03 \x01(\x01R\x05price\"\x85\x02\n" +
+	"\bquantity\x18\x02 \x01(\rR\bquantity\x12\x1f\n" +
+	"\vprice_cents\x18\x03 \x01(\x03R\n" +
+	"priceCents\"\x85\x02\n" +
 	"\x11OrderCreatedEvent\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1d\n" +
 	"\n" +
@@ -506,7 +507,7 @@ const file_events_v1_events_proto_rawDesc = "" +
 	"event_type\x18\x02 \x01(\tR\teventType\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x03 \x01(\tR\tproductId\x12\x1a\n" +
-	"\bquantity\x18\x04 \x01(\x05R\bquantity\x12\x1c\n" +
+	"\bquantity\x18\x04 \x01(\rR\bquantity\x12\x1c\n" +
 	"\ttimestamp\x18\x05 \x01(\x03R\ttimestampBZZXgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1;eventsv1b\x06proto3"
 
 var (
