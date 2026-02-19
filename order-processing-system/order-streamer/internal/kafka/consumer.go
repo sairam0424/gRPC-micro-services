@@ -111,9 +111,10 @@ func (c *Consumer) Start(ctx context.Context, topic string) {
 				Items:      items,
 			}
 
-			// Idempotency check
-			if _, loaded := c.processedEvents.LoadOrStore(event.OrderID, time.Now()); loaded {
-				log.Printf("Duplicate event ignored: %s", event.OrderID)
+			// Idempotency check: Use OrderID + Status to allow status transitions
+			dedupeKey := fmt.Sprintf("%s:%s", event.OrderID, event.Status)
+			if _, loaded := c.processedEvents.LoadOrStore(dedupeKey, time.Now()); loaded {
+				log.Printf("Duplicate event ignored: %s", dedupeKey)
 				continue
 			}
 
