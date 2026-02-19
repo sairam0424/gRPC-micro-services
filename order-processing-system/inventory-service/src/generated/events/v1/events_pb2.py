@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x65vents/v1/events.proto\x12\tevents.v1\"@\n\tOrderItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\r\n\x05price\x18\x03 \x01(\x01\"\xb9\x01\n\x11OrderCreatedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x10\n\x08order_id\x18\x03 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x04 \x01(\t\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x0f\n\x07message\x18\x06 \x01(\t\x12#\n\x05items\x18\x07 \x03(\x0b\x32\x14.events.v1.OrderItem\x12\x11\n\ttimestamp\x18\x08 \x01(\x03\"\xbe\x01\n\x16InventoryReservedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x10\n\x08order_id\x18\x03 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x04 \x01(\t\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x0f\n\x07message\x18\x06 \x01(\t\x12#\n\x05items\x18\x07 \x03(\x0b\x32\x14.events.v1.OrderItem\x12\x11\n\ttimestamp\x18\x08 \x01(\x03\"\xbc\x01\n\x14InventoryFailedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x10\n\x08order_id\x18\x03 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x04 \x01(\t\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x0f\n\x07message\x18\x06 \x01(\t\x12#\n\x05items\x18\x07 \x03(\x0b\x32\x14.events.v1.OrderItem\x12\x11\n\ttimestamp\x18\x08 \x01(\x03\"v\n\x15InventoryUpdatedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x12\n\nproduct_id\x18\x03 \x01(\t\x12\x10\n\x08quantity\x18\x04 \x01(\x05\x12\x11\n\ttimestamp\x18\x05 \x01(\x03\x42ZZXgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1;eventsv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x16\x65vents/v1/events.proto\x12\tevents.v1\"F\n\tOrderItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\r\x12\x13\n\x0bprice_cents\x18\x03 \x01(\x03\"\xb9\x01\n\x11OrderCreatedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x10\n\x08order_id\x18\x03 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x04 \x01(\t\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x0f\n\x07message\x18\x06 \x01(\t\x12#\n\x05items\x18\x07 \x03(\x0b\x32\x14.events.v1.OrderItem\x12\x11\n\ttimestamp\x18\x08 \x01(\x03\"\xbe\x01\n\x16InventoryReservedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x10\n\x08order_id\x18\x03 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x04 \x01(\t\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x0f\n\x07message\x18\x06 \x01(\t\x12#\n\x05items\x18\x07 \x03(\x0b\x32\x14.events.v1.OrderItem\x12\x11\n\ttimestamp\x18\x08 \x01(\x03\"\xbc\x01\n\x14InventoryFailedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x10\n\x08order_id\x18\x03 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x04 \x01(\t\x12\x0e\n\x06status\x18\x05 \x01(\t\x12\x0f\n\x07message\x18\x06 \x01(\t\x12#\n\x05items\x18\x07 \x03(\x0b\x32\x14.events.v1.OrderItem\x12\x11\n\ttimestamp\x18\x08 \x01(\x03\"v\n\x15InventoryUpdatedEvent\x12\x10\n\x08\x65vent_id\x18\x01 \x01(\t\x12\x12\n\nevent_type\x18\x02 \x01(\t\x12\x12\n\nproduct_id\x18\x03 \x01(\t\x12\x10\n\x08quantity\x18\x04 \x01(\r\x12\x11\n\ttimestamp\x18\x05 \x01(\x03\x42ZZXgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1;eventsv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,13 +33,13 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZXgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1;eventsv1'
   _globals['_ORDERITEM']._serialized_start=37
-  _globals['_ORDERITEM']._serialized_end=101
-  _globals['_ORDERCREATEDEVENT']._serialized_start=104
-  _globals['_ORDERCREATEDEVENT']._serialized_end=289
-  _globals['_INVENTORYRESERVEDEVENT']._serialized_start=292
-  _globals['_INVENTORYRESERVEDEVENT']._serialized_end=482
-  _globals['_INVENTORYFAILEDEVENT']._serialized_start=485
-  _globals['_INVENTORYFAILEDEVENT']._serialized_end=673
-  _globals['_INVENTORYUPDATEDEVENT']._serialized_start=675
-  _globals['_INVENTORYUPDATEDEVENT']._serialized_end=793
+  _globals['_ORDERITEM']._serialized_end=107
+  _globals['_ORDERCREATEDEVENT']._serialized_start=110
+  _globals['_ORDERCREATEDEVENT']._serialized_end=295
+  _globals['_INVENTORYRESERVEDEVENT']._serialized_start=298
+  _globals['_INVENTORYRESERVEDEVENT']._serialized_end=488
+  _globals['_INVENTORYFAILEDEVENT']._serialized_start=491
+  _globals['_INVENTORYFAILEDEVENT']._serialized_end=679
+  _globals['_INVENTORYUPDATEDEVENT']._serialized_start=681
+  _globals['_INVENTORYUPDATEDEVENT']._serialized_end=799
 # @@protoc_insertion_point(module_scope)

@@ -7,10 +7,11 @@ from confluent_kafka import Consumer, Producer, KafkaError
 from confluent_kafka.serialization import SerializationContext, MessageField
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.protobuf import ProtobufDeserializer, ProtobufSerializer
-from . import crud
+from . import crud, schemas
 from .database import writer_session, reader_sessions
 from .bloom_filter import filter_manager
 from .cache import cache_manager
+from .schemas import ItemReq
 from generated.events.v1 import events_pb2
 
 logger = logging.getLogger(__name__)
@@ -61,7 +62,7 @@ class KafkaManager:
             'bootstrap.servers': brokers,
             'group.id': 'inventory-service-group',
             'auto.offset.reset': 'earliest',
-            'enable.auto.commit': True
+            'enable.auto.commit': False
         })
         
         # Initialize Producer
@@ -103,10 +104,15 @@ class KafkaManager:
                             self._handle_order_created_sync(event)
                         elif event.event_type == "inventory.updated":
                             self._handle_inventory_updated_sync(event)
+                        
+                        # Manual Commit after successful sync handling
+                        self.consumer.commit(asynchronous=False)
                             
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
                     self._publish_to_dlq_sync(msg.value(), str(e))
+                    # Commit even if sent to DLQ to avoid re-processing
+                    self.consumer.commit(asynchronous=False)
                     
         except Exception as e:
             logger.error(f"Fatal error in consume loop: {e}")
@@ -191,12 +197,6 @@ class KafkaManager:
         customer_id = event.customer_id
         items = event.items
         
-        # Convert protobuf items to internal format
-        class ItemReq:
-            def __init__(self, product_id, quantity):
-                self.product_id = product_id
-                self.quantity = quantity
-
         req_items = [ItemReq(item.product_id, item.quantity) for item in items]
         
         # Tier-2 Bloom Filter Check

@@ -4,8 +4,9 @@ import asyncio
 import threading
 import time
 from confluent_kafka import Consumer, Producer, KafkaError
-from . import crud
+from . import crud, schemas
 from .database import writer_session
+from .schemas import ItemReq
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ class SagaManager:
             'bootstrap.servers': brokers,
             'group.id': 'inventory-service-saga',
             'auto.offset.reset': 'earliest',
-            'enable.auto.commit': True
+            'enable.auto.commit': False
         })
         
         # Initialize Producer
@@ -52,10 +53,16 @@ class SagaManager:
                 try:
                     command = json.loads(msg.value().decode('utf-8'))
                     self._handle_command_sync(command)
+                    
+                    # Manual Commit after successful processing
+                    self.consumer.commit(asynchronous=False)
                 except Exception as e:
                     logger.error(f"Error processing saga command: {e}")
                     
+        except Exception as e:
+            logger.error(f"Fatal error in Saga Manager: {e}")
         finally:
+            logger.info("Saga Manager: Closing consumer...")
             self.consumer.close()
 
     def stop(self):
@@ -80,20 +87,26 @@ class SagaManager:
         result = {}
         error = None
         
+        if not all([saga_id, order_id, cmd_type]):
+            logger.error(f"Invalid saga command: missing required fields. id: {saga_id}, order: {order_id}, cmd: {cmd_type}")
+            self._publish_event_sync(saga_id, order_id, cmd_type, {}, "Invalid command: missing required fields")
+            return
+
         try:
             if cmd_type == 'reserve_stock':
                 items_raw = data.get('items', [])
-                class ItemReq:
-                    def __init__(self, product_id, quantity):
-                        self.product_id = product_id
-                        self.quantity = quantity
-                req_items = [ItemReq(i.get('productId'), i.get('quantity')) for i in items_raw]
+                if not items_raw:
+                    raise ValueError("No items provided for stock reservation")
+                req_items = [ItemReq(i.get('product_id'), i.get('quantity')) for i in items_raw]
                 
                 async with writer_session() as session:
                     # Idempotency Check
                     command_id = f"saga:{saga_id}:{cmd_type}"
                     if not await crud.check_and_record_event(session, command_id, "inventory-service"):
                         logger.info(f"Duplicate saga command ignored: {command_id}")
+                        # Still notify orchestrator of success to avoid stuck saga
+                        result = {'status': 'RESERVED', 'message': 'Duplicate command handled (already reserved)'}
+                        self._publish_event_sync(saga_id, order_id, cmd_type, result, None)
                         return
 
                     success, message, _ = await crud.reserve_stock_atomic(session, order_id, req_items)
@@ -104,17 +117,17 @@ class SagaManager:
             
             elif cmd_type == 'release_stock':
                 items_raw = data.get('items', [])
-                class ItemReq:
-                    def __init__(self, product_id, quantity):
-                        self.product_id = product_id
-                        self.quantity = quantity
-                req_items = [ItemReq(i.get('productId'), i.get('quantity')) for i in items_raw]
+                if not items_raw:
+                    raise ValueError("No items provided for stock release")
+                req_items = [ItemReq(i.get('product_id'), i.get('quantity')) for i in items_raw]
                 
                 async with writer_session() as session:
                     # Idempotency Check
                     command_id = f"saga:{saga_id}:{cmd_type}"
                     if not await crud.check_and_record_event(session, command_id, "inventory-service"):
                         logger.info(f"Duplicate saga command ignored: {command_id}")
+                        result = {'status': 'RELEASED'}
+                        self._publish_event_sync(saga_id, order_id, cmd_type, result, None)
                         return
 
                     await crud.release_stock_atomic(session, order_id, req_items)
@@ -137,7 +150,8 @@ class SagaManager:
             "orderId": order_id,
             "command": command,
             "status": status,
-            "data": result
+            "data": result,
+            "timestamp": int(time.time() * 1000)
         }
         if error:
             payload["error"] = error

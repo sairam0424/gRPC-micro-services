@@ -148,7 +148,7 @@ func (x *CheckStockRequest) GetProductId() string {
 type CheckStockResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Quantity      uint32                 `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -190,7 +190,7 @@ func (x *CheckStockResponse) GetProductId() string {
 	return ""
 }
 
-func (x *CheckStockResponse) GetQuantity() int32 {
+func (x *CheckStockResponse) GetQuantity() uint32 {
 	if x != nil {
 		return x.Quantity
 	}
@@ -452,7 +452,7 @@ func (x *UpdateStockRequest) GetQuantityChange() int32 {
 type UpdateStockResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	NewQuantity   int32                  `protobuf:"varint,2,opt,name=new_quantity,json=newQuantity,proto3" json:"new_quantity,omitempty"`
+	NewQuantity   uint32                 `protobuf:"varint,2,opt,name=new_quantity,json=newQuantity,proto3" json:"new_quantity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -494,7 +494,7 @@ func (x *UpdateStockResponse) GetProductId() string {
 	return ""
 }
 
-func (x *UpdateStockResponse) GetNewQuantity() int32 {
+func (x *UpdateStockResponse) GetNewQuantity() uint32 {
 	if x != nil {
 		return x.NewQuantity
 	}
@@ -504,7 +504,7 @@ func (x *UpdateStockResponse) GetNewQuantity() int32 {
 type InventoryItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	Quantity      uint32                 `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -546,7 +546,7 @@ func (x *InventoryItem) GetProductId() string {
 	return ""
 }
 
-func (x *InventoryItem) GetQuantity() int32 {
+func (x *InventoryItem) GetQuantity() uint32 {
 	if x != nil {
 		return x.Quantity
 	}
@@ -567,7 +567,7 @@ const file_inventory_v1_inventory_proto_rawDesc = "" +
 	"\x12CheckStockResponse\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity\"c\n" +
+	"\bquantity\x18\x02 \x01(\rR\bquantity\"c\n" +
 	"\x13ReserveStockRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x121\n" +
 	"\x05items\x18\x02 \x03(\v2\x1b.inventory.v1.InventoryItemR\x05items\"J\n" +
@@ -586,11 +586,11 @@ const file_inventory_v1_inventory_proto_rawDesc = "" +
 	"\x13UpdateStockResponse\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\x12!\n" +
-	"\fnew_quantity\x18\x02 \x01(\x05R\vnewQuantity\"J\n" +
+	"\fnew_quantity\x18\x02 \x01(\rR\vnewQuantity\"J\n" +
 	"\rInventoryItem\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity2\xbf\x03\n" +
+	"\bquantity\x18\x02 \x01(\rR\bquantity2\xbf\x03\n" +
 	"\x10InventoryService\x12O\n" +
 	"\n" +
 	"CheckStock\x12\x1f.inventory.v1.CheckStockRequest\x1a .inventory.v1.CheckStockResponse\x12U\n" +

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/redis/go-redis/v9"
@@ -78,14 +79,18 @@ func main() {
 	reflection.Register(s)
 
 	// Health check server
-	go func() {
-		mux := http.NewServeMux()
-		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	healthSrv := &http.Server{
+		Addr: ":8081",
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"status": "healthy"}`))
-		})
+		}),
+	}
+	go func() {
 		log.Printf("Health check server listening at :8081")
-		http.ListenAndServe(":8081", mux)
+		if err := healthSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("Health check server failed: %v", err)
+		}
 	}()
 
 	go func() {
@@ -100,5 +105,17 @@ func main() {
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down Saga Orchestrator...")
+	
+	cancel() // Stop Saga Engine loop
+	
+	// Wait a bit for the loop to finish (ideally use a WaitGroup)
+	time.Sleep(1 * time.Second)
+	
 	s.GracefulStop()
+	
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	healthSrv.Shutdown(shutdownCtx)
+	
+	rdb.Close()
 }

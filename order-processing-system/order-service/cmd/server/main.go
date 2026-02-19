@@ -34,6 +34,7 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/saga"
+	"gorm.io/gorm/clause"
 )
 
 func initTracer() (*sdktrace.TracerProvider, error) {
@@ -84,10 +85,10 @@ func (s *server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderReques
 
 		for _, item := range req.Items {
 			dbOrder.Items = append(dbOrder.Items, models.OrderItem{
-				OrderID:   orderID,
-				ProductID: item.ProductId,
-				Quantity:  item.Quantity,
-				Price:     item.Price,
+				OrderID:    orderID,
+				ProductID:  item.ProductId,
+				Quantity:   item.Quantity,
+				PriceCents: item.PriceCents,
 			})
 		}
 
@@ -99,9 +100,9 @@ func (s *server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderReques
 		eventItems := make([]*eventsv1.OrderItem, 0, len(req.Items))
 		for _, item := range req.Items {
 			eventItems = append(eventItems, &eventsv1.OrderItem{
-				ProductId: item.ProductId,
-				Quantity:  item.Quantity,
-				Price:     item.Price,
+				ProductId:  item.ProductId,
+				Quantity:   item.Quantity,
+				PriceCents: item.PriceCents,
 			})
 		}
 
@@ -144,9 +145,9 @@ func (s *server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderReques
 	sagaItems := make([]*sagav1.OrderItem, 0, len(req.Items))
 	for _, item := range req.Items {
 		sagaItems = append(sagaItems, &sagav1.OrderItem{
-			ProductId: item.ProductId,
-			Quantity:  item.Quantity,
-			Price:     item.Price,
+			ProductId:  item.ProductId,
+			Quantity:   item.Quantity,
+			PriceCents: item.PriceCents,
 		})
 	}
 
@@ -188,6 +189,8 @@ func mapDBOrderToPB(dbOrder *models.Order) *orderv1.GetOrderResponse {
 		orderStatus = orderv1.OrderStatus_ORDER_STATUS_PENDING
 	case "COMPLETED":
 		orderStatus = orderv1.OrderStatus_ORDER_STATUS_COMPLETED
+	case "FAILED":
+		orderStatus = orderv1.OrderStatus_ORDER_STATUS_FAILED
 	default:
 		orderStatus = orderv1.OrderStatus_ORDER_STATUS_UNSPECIFIED
 	}
@@ -195,9 +198,9 @@ func mapDBOrderToPB(dbOrder *models.Order) *orderv1.GetOrderResponse {
 	var pbItems []*orderv1.OrderItem
 	for _, item := range dbOrder.Items {
 		pbItems = append(pbItems, &orderv1.OrderItem{
-			ProductId: item.ProductID,
-			Quantity:  item.Quantity,
-			Price:     item.Price,
+			ProductId:  item.ProductID,
+			Quantity:   item.Quantity,
+			PriceCents: item.PriceCents,
 		})
 	}
 
@@ -248,12 +251,12 @@ func main() {
 
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
-		kafkaBrokers = "localhost:9092"
+		kafkaBrokers = "kafka:29092"
 	}
 
 	schemaRegistryURL := os.Getenv("SCHEMA_REGISTRY_URL")
 	if schemaRegistryURL == "" {
-		schemaRegistryURL = "http://localhost:8081"
+		schemaRegistryURL = "http://schema-registry:8081"
 	}
 
 	invClient, err := inventory.NewClient(inventoryAddr)
@@ -289,48 +292,6 @@ func main() {
 	defer sagaConn.Close()
 	sagaClient := sagav1.NewSagaServiceClient(sagaConn)
 
-	// Conductor Workers still needed for local database updates
-	// Saga Orchestration via Kafka
-	kafkaBrokers = os.Getenv("KAFKA_BROKERS")
-	if kafkaBrokers == "" {
-		kafkaBrokers = "kafka:29092"
-	}
-
-	log.Printf("Initializing Saga Consumer at %s", kafkaBrokers)
-	c, err := ckafka.NewConsumer(&ckafka.ConfigMap{
-		"bootstrap.servers": kafkaBrokers,
-		"group.id":          "order-service-saga",
-		"auto.offset.reset": "earliest",
-	})
-	if err != nil {
-		log.Fatalf("Failed to create Kafka consumer: %v", err)
-	}
-
-	if err = c.SubscribeTopics([]string{"saga-commands"}, nil); err != nil {
-		log.Fatalf("Failed to subscribe to saga-commands: %v", err)
-	}
-
-	// We need a producer to send results back to saga-events
-	p, err := ckafka.NewProducer(&ckafka.ConfigMap{"bootstrap.servers": kafkaBrokers})
-	if err != nil {
-		log.Fatalf("Failed to create Kafka producer: %v", err)
-	}
-
-	go func() {
-		for {
-			ev := c.Poll(100)
-			if ev == nil {
-				continue
-			}
-
-			switch e := ev.(type) {
-			case *ckafka.Message:
-				saga.HandleSagaCommand(p, e)
-			case ckafka.Error:
-				log.Printf("Kafka error: %v", e)
-			}
-		}
-	}()
 
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
@@ -354,6 +315,51 @@ func main() {
 
 	// Start Outbox Relay goroutine
 	go startOutboxRelay(ctx, database.DB, producer)
+
+	// Saga Orchestration via Kafka
+	log.Printf("Initializing Saga Consumer at %s", kafkaBrokers)
+	c, err := ckafka.NewConsumer(&ckafka.ConfigMap{
+		"bootstrap.servers": kafkaBrokers,
+		"group.id":          "order-service-saga",
+		"auto.offset.reset": "earliest",
+	})
+	if err != nil {
+		log.Fatalf("Failed to create Kafka consumer: %v", err)
+	}
+
+	if err = c.SubscribeTopics([]string{"saga-commands"}, nil); err != nil {
+		log.Fatalf("Failed to subscribe to saga-commands: %v", err)
+	}
+
+	// We need a producer to send results back to saga-events
+	p, err := ckafka.NewProducer(&ckafka.ConfigMap{"bootstrap.servers": kafkaBrokers})
+	if err != nil {
+		log.Fatalf("Failed to create Kafka producer: %v", err)
+	}
+
+	go func() {
+		defer c.Close()
+		defer p.Close()
+		for {
+			select {
+			case <-ctx.Done():
+				log.Println("Stopping Saga consumer...")
+				return
+			default:
+				ev := c.Poll(100)
+				if ev == nil {
+					continue
+				}
+
+				switch e := ev.(type) {
+				case *ckafka.Message:
+					saga.HandleSagaCommand(p, e)
+				case ckafka.Error:
+					log.Printf("Kafka error: %v", e)
+				}
+			}
+		}
+	}()
 
 	// Handle Graceful Shutdown
 	quit := make(chan os.Signal, 1)
@@ -418,38 +424,47 @@ func startOutboxRelay(ctx context.Context, db *gorm.DB, producer *kafka.Producer
 			return
 		case <-ticker.C:
 			var messages []models.Outbox
-			// Fetch up to 100 unprocessed messages to process
-			if err := db.Where("processed_at IS NULL").Order("created_at asc").Limit(100).Find(&messages).Error; err != nil {
-				log.Printf("Outbox Relay: failed to fetch messages: %v", err)
-				continue
-			}
-
-			for _, msg := range messages {
-				// We need to unmarshal to get the proper Protobuf message for the producer
-				// The producer expectations: context, proto.Message
-				// But wait, the producer's PublishOrderEvent specifically takes *eventsv1.OrderCreatedEvent?
-				// Let's check internal/kafka/producer.go again.
-				
-				// Re-reading internal/kafka/producer.go:
-				// func (p *Producer) PublishOrderEvent(ctx context.Context, event *eventsv1.OrderCreatedEvent) error
-				
-				var event eventsv1.OrderCreatedEvent
-				if err := proto.Unmarshal(msg.Payload, &event); err != nil {
-					log.Printf("Outbox Relay: failed to unmarshal payload for ID %d: %v", msg.ID, err)
-					// If it's unmarshalable, we might want to move it to a DLQ or just skip it
-					continue
+			
+			// Use Transaction for atomic fetch and mark
+			err := db.Transaction(func(tx *gorm.DB) error {
+				// 1. Fetch and Lock messages (SKIP LOCKED prevents multiple instances from picking same messages)
+				if err := tx.Clauses(clause.Locking{Strength: "UPDATE", Options: "SKIP LOCKED"}).
+					Where("processed_at IS NULL").
+					Order("created_at asc").
+					Limit(100).
+					Find(&messages).Error; err != nil {
+					return err
 				}
 
-				if err := producer.PublishOrderEvent(ctx, &event); err != nil {
-					log.Printf("Outbox Relay: failed to publish message %d to Kafka: %v", msg.ID, err)
-					continue
+				if len(messages) == 0 {
+					return nil
 				}
 
-				// Success: mark as processed
-				now := time.Now()
-				if err := db.Model(&msg).Update("processed_at", &now).Error; err != nil {
-					log.Printf("Outbox Relay: failed to mark message %d as processed: %v", msg.ID, err)
+				for _, msg := range messages {
+					var event eventsv1.OrderCreatedEvent
+					if err := proto.Unmarshal(msg.Payload, &event); err != nil {
+						log.Printf("Outbox Relay: failed to unmarshal payload for ID %d: %v", msg.ID, err)
+						continue
+					}
+
+					// 2. Publish to Kafka
+					if err := producer.PublishOrderEvent(ctx, &event); err != nil {
+						// On Kafka failure, we return error to rollback the batch
+						// Alternatively, we could log and continue, but then message stays NULL and will be retried
+						return fmt.Errorf("failed to publish message %d: %w", msg.ID, err)
+					}
+
+					// 3. Mark as processed
+					now := time.Now()
+					if err := tx.Model(&msg).Update("processed_at", &now).Error; err != nil {
+						return err
+					}
 				}
+				return nil
+			})
+
+			if err != nil {
+				log.Printf("Outbox Relay error: %v", err)
 			}
 		}
 	}

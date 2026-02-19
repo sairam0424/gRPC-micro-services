@@ -18,6 +18,7 @@ enum OrderStatus {
   ORDER_STATUS_PROCESSING = 2;
   ORDER_STATUS_COMPLETED = 3;
   ORDER_STATUS_CANCELLED = 4;
+  ORDER_STATUS_FAILED = 5;
 }
 
 message CreateOrderRequest {
@@ -51,6 +52,6 @@ message ListOrdersResponse {
 
 message OrderItem {
   string product_id = 1;
-  int32 quantity = 2;
-  double price = 3;
+  uint32 quantity = 2;
+  int64 price_cents = 3;
 }
