@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14order/v1/order.proto\x12\x08order.v1\"M\n\x12\x43reateOrderRequest\x12\x13\n\x0b\x63ustomer_id\x18\x01 \x01(\t\x12\"\n\x05items\x18\x02 \x03(\x0b\x32\x13.order.v1.OrderItem\"N\n\x13\x43reateOrderResponse\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12%\n\x06status\x18\x02 \x01(\x0e\x32\x15.order.v1.OrderStatus\"#\n\x0fGetOrderRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"\x84\x01\n\x10GetOrderResponse\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x02 \x01(\t\x12\"\n\x05items\x18\x03 \x03(\x0b\x32\x13.order.v1.OrderItem\x12%\n\x06status\x18\x04 \x01(\x0e\x32\x15.order.v1.OrderStatus\"(\n\x11ListOrdersRequest\x12\x13\n\x0b\x63ustomer_id\x18\x01 \x01(\t\"@\n\x12ListOrdersResponse\x12*\n\x06orders\x18\x01 \x03(\x0b\x32\x1a.order.v1.GetOrderResponse\"@\n\tOrderItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\x05\x12\r\n\x05price\x18\x03 \x01(\x01*\x9a\x01\n\x0bOrderStatus\x12\x1c\n\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n\x14ORDER_STATUS_PENDING\x10\x01\x12\x1b\n\x17ORDER_STATUS_PROCESSING\x10\x02\x12\x1a\n\x16ORDER_STATUS_COMPLETED\x10\x03\x12\x1a\n\x16ORDER_STATUS_CANCELLED\x10\x04\x32\xe6\x01\n\x0cOrderService\x12J\n\x0b\x43reateOrder\x12\x1c.order.v1.CreateOrderRequest\x1a\x1d.order.v1.CreateOrderResponse\x12\x41\n\x08GetOrder\x12\x19.order.v1.GetOrderRequest\x1a\x1a.order.v1.GetOrderResponse\x12G\n\nListOrders\x12\x1b.order.v1.ListOrdersRequest\x1a\x1c.order.v1.ListOrdersResponseBXZVgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1;orderv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14order/v1/order.proto\x12\x08order.v1\"M\n\x12\x43reateOrderRequest\x12\x13\n\x0b\x63ustomer_id\x18\x01 \x01(\t\x12\"\n\x05items\x18\x02 \x03(\x0b\x32\x13.order.v1.OrderItem\"N\n\x13\x43reateOrderResponse\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12%\n\x06status\x18\x02 \x01(\x0e\x32\x15.order.v1.OrderStatus\"#\n\x0fGetOrderRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\"\x84\x01\n\x10GetOrderResponse\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63ustomer_id\x18\x02 \x01(\t\x12\"\n\x05items\x18\x03 \x03(\x0b\x32\x13.order.v1.OrderItem\x12%\n\x06status\x18\x04 \x01(\x0e\x32\x15.order.v1.OrderStatus\"(\n\x11ListOrdersRequest\x12\x13\n\x0b\x63ustomer_id\x18\x01 \x01(\t\"@\n\x12ListOrdersResponse\x12*\n\x06orders\x18\x01 \x03(\x0b\x32\x1a.order.v1.GetOrderResponse\"F\n\tOrderItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\r\x12\x13\n\x0bprice_cents\x18\x03 \x01(\x03*\xb3\x01\n\x0bOrderStatus\x12\x1c\n\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n\x14ORDER_STATUS_PENDING\x10\x01\x12\x1b\n\x17ORDER_STATUS_PROCESSING\x10\x02\x12\x1a\n\x16ORDER_STATUS_COMPLETED\x10\x03\x12\x1a\n\x16ORDER_STATUS_CANCELLED\x10\x04\x12\x17\n\x13ORDER_STATUS_FAILED\x10\x05\x32\xe6\x01\n\x0cOrderService\x12J\n\x0b\x43reateOrder\x12\x1c.order.v1.CreateOrderRequest\x1a\x1d.order.v1.CreateOrderResponse\x12\x41\n\x08GetOrder\x12\x19.order.v1.GetOrderRequest\x1a\x1a.order.v1.GetOrderResponse\x12G\n\nListOrders\x12\x1b.order.v1.ListOrdersRequest\x1a\x1c.order.v1.ListOrdersResponseBXZVgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1;orderv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,8 +32,8 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'order.v1.order_pb2', _globa
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'ZVgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/order/v1;orderv1'
-  _globals['_ORDERSTATUS']._serialized_start=540
-  _globals['_ORDERSTATUS']._serialized_end=694
+  _globals['_ORDERSTATUS']._serialized_start=546
+  _globals['_ORDERSTATUS']._serialized_end=725
   _globals['_CREATEORDERREQUEST']._serialized_start=34
   _globals['_CREATEORDERREQUEST']._serialized_end=111
   _globals['_CREATEORDERRESPONSE']._serialized_start=113
@@ -47,7 +47,7 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_LISTORDERSRESPONSE']._serialized_start=407
   _globals['_LISTORDERSRESPONSE']._serialized_end=471
   _globals['_ORDERITEM']._serialized_start=473
-  _globals['_ORDERITEM']._serialized_end=537
-  _globals['_ORDERSERVICE']._serialized_start=697
-  _globals['_ORDERSERVICE']._serialized_end=927
+  _globals['_ORDERITEM']._serialized_end=543
+  _globals['_ORDERSERVICE']._serialized_start=728
+  _globals['_ORDERSERVICE']._serialized_end=958
 # @@protoc_insertion_point(module_scope)

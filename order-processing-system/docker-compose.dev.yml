@@ -27,6 +27,8 @@ services:
       retries: 5
       start_period: 60s
     depends_on:
+      kafka:
+        condition: service_healthy
       inventory-service:
         condition: service_healthy
       otel-collector:
@@ -590,7 +592,6 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - CONDUCTOR_SERVER_URL= # Removed
     depends_on:
       kafka:
         condition: service_healthy
