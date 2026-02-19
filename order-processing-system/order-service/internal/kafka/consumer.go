@@ -12,6 +12,7 @@ import (
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/database"
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/models"
 	eventsv1 "github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1"
+	"gorm.io/gorm"
 )
 
 type OrderConsumer struct {
@@ -92,21 +93,29 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 			}
 
 			// Handle different event types
-			switch event.EventType {
-			case "inventory.reserved":
-				c.handleInventoryReserved(event)
-			case "inventory.failed":
-				c.handleInventoryFailed(event)
-			}
+			err = database.DB.Transaction(func(tx *gorm.DB) error {
+				if !database.CheckAndRecordEvent(tx, event.EventId, "order-service") {
+					log.Printf("Duplicate event ignored: %s", event.EventId)
+					return nil
+				}
+
+				switch event.EventType {
+				case "inventory.reserved":
+					c.handleInventoryReserved(tx, event)
+				case "inventory.failed":
+					c.handleInventoryFailed(tx, event)
+				}
+				return nil
+			})
 		}
 	}
 }
 
-func (c *OrderConsumer) handleInventoryReserved(event *eventsv1.InventoryReservedEvent) {
+func (c *OrderConsumer) handleInventoryReserved(tx *gorm.DB, event *eventsv1.InventoryReservedEvent) {
 	log.Printf("Handling inventory.reserved for order %s", event.OrderId)
 
 	// Update order status to COMPLETED
-	err := database.DB.Model(&models.Order{}).Where("order_id = ?", event.OrderId).Update("status", "COMPLETED").Error
+	err := tx.Model(&models.Order{}).Where("order_id = ?", event.OrderId).Update("status", "COMPLETED").Error
 	if err != nil {
 		log.Printf("Failed to update order status in DB: %v", err)
 		return
@@ -116,11 +125,11 @@ func (c *OrderConsumer) handleInventoryReserved(event *eventsv1.InventoryReserve
 	c.publishOrderUpdate(event, "COMPLETED")
 }
 
-func (c *OrderConsumer) handleInventoryFailed(event *eventsv1.InventoryReservedEvent) {
+func (c *OrderConsumer) handleInventoryFailed(tx *gorm.DB, event *eventsv1.InventoryReservedEvent) {
 	log.Printf("Handling inventory.failed for order %s: %s", event.OrderId, event.Message)
 
 	// Update order status to FAILED
-	err := database.DB.Model(&models.Order{}).Where("order_id = ?", event.OrderId).Update("status", "FAILED").Error
+	err := tx.Model(&models.Order{}).Where("order_id = ?", event.OrderId).Update("status", "FAILED").Error
 	if err != nil {
 		log.Printf("Failed to update order status in DB: %v", err)
 		return
