@@ -107,9 +107,9 @@ func (s *server) SubscribeOrderUpdates(req *pb.SubscribeOrderUpdatesRequest, str
 			var eventItems []*pb.OrderItem
 			for _, item := range event.Items {
 				eventItems = append(eventItems, &pb.OrderItem{
-					ProductId: item.ProductID,
-					Quantity:  item.Quantity,
-					Price:     item.Price,
+					ProductId:  item.ProductID,
+					Quantity:   item.Quantity,
+					PriceCents: item.PriceCents,
 				})
 			}
 

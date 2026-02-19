@@ -35,7 +35,7 @@ message CheckStockRequest {
 
 message CheckStockResponse {
   string product_id = 1;
-  int32 quantity = 2;
+  uint32 quantity = 2;
 }
 
 message ReserveStockRequest {
@@ -64,10 +64,10 @@ message UpdateStockRequest {
 
 message UpdateStockResponse {
   string product_id = 1;
-  int32 new_quantity = 2;
+  uint32 new_quantity = 2;
 }
 
 message InventoryItem {
   string product_id = 1;
-  int32 quantity = 2;
+  uint32 quantity = 2;
 }

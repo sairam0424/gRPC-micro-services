@@ -136,8 +136,10 @@ func (e *SagaEngine) handleEvent(ctx context.Context, msg *kafka.Message) {
 	processedKey := fmt.Sprintf("saga:processed:%s:%s:%s", sagaID, command, status)
 	isProcessed, err := e.redisClient.SetNX(ctx, processedKey, "true", 1*time.Hour).Result()
 	if err != nil {
-		log.Printf("Saga Engine: Redis error checking idempotency: %v", err)
-	} else if !isProcessed {
+		log.Printf("Saga Engine: CRITICAL: Redis error checking idempotency: %v. Aborting to prevent inconsistent state.", err)
+		return
+	}
+	if !isProcessed {
 		log.Printf("Saga Engine: Duplicate event detected for Saga %s, Command %s, Status %s. Skipping.", sagaID, command, status)
 		return
 	}
@@ -147,6 +149,12 @@ func (e *SagaEngine) handleEvent(ctx context.Context, msg *kafka.Message) {
 		log.Printf("Saga Engine: Failed to get saga %s: %v", sagaID, err)
 		// Clean up processed key so it can be retried
 		e.redisClient.Del(ctx, processedKey)
+		return
+	}
+
+	// Double check: if status in instance already matches or is more advanced, skip
+	if instance.Status == SagaStatusCompleted || instance.Status == SagaStatusFailed {
+		log.Printf("Saga Engine: Saga %s already terminal (%s). Skipping event %s (%s).", sagaID, instance.Status, command, status)
 		return
 	}
 
@@ -174,7 +182,11 @@ func (e *SagaEngine) handleNextStep(ctx context.Context, instance *SagaInstance,
 		log.Printf("Saga Engine: Saga %s COMPLETED successfully", instance.ID)
 
 	case "release_stock":
+		// Release stock was successful, now ensure order is failed
+		instance.CurrentStep = "FAIL_ORDER"
+		e.saveSaga(ctx, instance)
 		e.publishCommand(instance, "fail_order")
+
 	case "fail_order":
 		instance.Status = SagaStatusFailed
 		instance.CurrentStep = "FAILED"
@@ -188,16 +200,32 @@ func (e *SagaEngine) handleFailure(ctx context.Context, instance *SagaInstance, 
 
 	switch lastCmd {
 	case "reserve_stock":
+		// Initial step failed, move directly to fail_order
 		instance.Status = SagaStatusFailed
 		instance.CurrentStep = "FAIL_ORDER"
 		e.saveSaga(ctx, instance)
 		e.publishCommand(instance, "fail_order")
 
 	case "complete_order":
+		// Order completion failed, start compensation
 		instance.Status = SagaStatusCompensating
 		instance.CurrentStep = "RELEASE_STOCK"
 		e.saveSaga(ctx, instance)
 		e.publishCommand(instance, "release_stock")
+
+	case "release_stock":
+		// Compensation failed! In a real system, we'd alert or move to a dead-letter queue / retry.
+		// For now, we move to fail_order to ensure order status is updated.
+		log.Printf("Saga Engine: CRITICAL: Compensation RELEASE_STOCK failed for Saga %s", instance.ID)
+		instance.CurrentStep = "FAIL_ORDER"
+		e.saveSaga(ctx, instance)
+		e.publishCommand(instance, "fail_order")
+
+	case "fail_order":
+		// Even failing failed. This is a terminal terminal error.
+		log.Printf("Saga Engine: CRITICAL: Final FAIL_ORDER command failed for Saga %s", instance.ID)
+		instance.Status = SagaStatusFailed
+		e.saveSaga(ctx, instance)
 	}
 }
 
@@ -235,9 +263,26 @@ func (e *SagaEngine) publishCommand(instance *SagaInstance, command string) erro
 
 	data, _ := json.Marshal(payload)
 
-	return e.producer.Produce(&kafka.Message{
+	deliveryChan := make(chan kafka.Event)
+	defer close(deliveryChan)
+
+	err := e.producer.Produce(&kafka.Message{
 		TopicPartition: kafka.TopicPartition{Topic: &topic, Partition: kafka.PartitionAny},
 		Value:          data,
 		Key:            []byte(instance.ID),
-	}, nil)
+	}, deliveryChan)
+
+	if err != nil {
+		return fmt.Errorf("failed to produce command %s: %w", command, err)
+	}
+
+	report := <-deliveryChan
+	m := report.(*kafka.Message)
+
+	if m.TopicPartition.Error != nil {
+		return fmt.Errorf("delivery failed for command %s: %w", command, m.TopicPartition.Error)
+	}
+
+	log.Printf("Saga Engine: Command %s delivered to topic %s [%d] at offset %v", command, *m.TopicPartition.Topic, m.TopicPartition.Partition, m.TopicPartition.Offset)
+	return nil
 }

@@ -199,7 +199,13 @@ async def lifespan(app: FastAPI):
     logger.info("Stopping gRPC server...")
     if hasattr(app.state, 'grpc_server'):
         await app.state.grpc_server.stop(0)
-    await app.state.kafka.stop()
+    
+    if hasattr(app.state, 'kafka'):
+        app.state.kafka.stop()
+    
+    if hasattr(app.state, 'saga'):
+        app.state.saga.stop()
+
     # Shutdown OpenTelemetry providers
     tracer_provider.shutdown()
     meter_provider.shutdown()

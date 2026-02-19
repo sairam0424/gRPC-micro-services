@@ -22,8 +22,8 @@ message StartOrderSagaRequest {
 
 message OrderItem {
   string product_id = 1;
-  int32 quantity = 2;
-  double price = 3;
+  uint32 quantity = 2;
+  int64 price_cents = 3;
 }
 
 message StartOrderSagaResponse {
