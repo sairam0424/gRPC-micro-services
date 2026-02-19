@@ -15,9 +15,9 @@ import (
 )
 
 type OrderItem struct {
-	ProductID string  `json:"product_id"`
-	Quantity  int32   `json:"quantity"`
-	Price     float64 `json:"price"`
+	ProductID string `json:"product_id"`
+	Quantity  uint32 `json:"quantity"`
+	PriceCents int64  `json:"price_cents"`
 }
 
 type OrderEvent struct {
@@ -96,9 +96,9 @@ func (c *Consumer) Start(ctx context.Context, topic string) {
 			items := make([]OrderItem, len(eventObj.Items))
 			for i, item := range eventObj.Items {
 				items[i] = OrderItem{
-					ProductID: item.ProductId,
-					Quantity:  item.Quantity,
-					Price:     item.Price,
+					ProductID:  item.ProductId,
+					Quantity:   item.Quantity,
+					PriceCents: item.PriceCents,
 				}
 			}
 

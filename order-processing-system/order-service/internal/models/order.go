@@ -14,9 +14,9 @@ type Order struct {
 }
 
 type OrderItem struct {
-	ID        uint   `gorm:"primaryKey"`
-	OrderID   string `gorm:"index"`
-	ProductID string
-	Quantity  int32
-	Price     float64
+	ID         uint   `gorm:"primaryKey"`
+	OrderID    string `gorm:"index"`
+	ProductID  string
+	Quantity   uint32
+	PriceCents int64
 }

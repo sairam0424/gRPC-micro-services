@@ -189,7 +189,7 @@ from fastapi.responses import StreamingResponse
 class OrderItem(BaseModel):
     product_id: str
     quantity: int
-    price: float
+    price_cents: int
 
 class CreateOrderRequest(BaseModel):
     customer_id: str
@@ -360,25 +360,51 @@ async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_
 
     # Idempotency Check
     idempotency_key = req_obj.headers.get("Idempotency-Key") if req_obj else None
+    req_hash = hashlib.sha256(request.json().encode() if hasattr(request, 'json') else json.dumps(request.dict()).encode()).hexdigest()
+    
     if idempotency_key:
         redis_key = f"idempotency:api:{idempotency_key}"
         try:
-            # Generate hash of request to ensure it hasn't changed for the same key
-            req_hash = hashlib.sha256(request.json().encode() if hasattr(request, 'json') else json.dumps(request.dict()).encode()).hexdigest()
-            
+            # 1. Check existing state
             cached_data = bloom_manager.redis_client.get(redis_key)
             if cached_data:
                 cached_json = json.loads(cached_data)
+                
+                # If still processing, tell client to wait
+                if cached_json.get("status") == "processing":
+                    logger.warning(f"Idempotency Conflict: Key {idempotency_key} is currently processing")
+                    raise HTTPException(status_code=425, detail="Order is already being processed. Please wait.")
+                
+                # If completed, check hash
                 if cached_json.get("hash") == req_hash:
                     logger.info(f"Idempotency Hit: Returning cached response for key {idempotency_key}")
                     return cached_json.get("response")
                 else:
                     logger.warning(f"Idempotency Conflict: Key {idempotency_key} used with different payload")
                     raise HTTPException(status_code=409, detail="Idempotency key conflict: different request payload for the same key.")
+            
+            # 2. Atomic claim: Set to 'processing' if not exists
+            processing_data = {
+                "status": "processing",
+                "hash": req_hash,
+                "timestamp": time.time()
+            }
+            if not bloom_manager.redis_client.set(redis_key, json.dumps(processing_data), nx=True, ex=300): # 5 min lock
+                # If set failed, it was just set by someone else. Re-run check.
+                cached_data = bloom_manager.redis_client.get(redis_key)
+                if cached_data:
+                    cached_json = json.loads(cached_data)
+                    if cached_json.get("status") == "processing":
+                        raise HTTPException(status_code=425, detail="Order is already being processed. Please wait.")
+                    if cached_json.get("hash") == req_hash:
+                        return cached_json.get("response")
+                    raise HTTPException(status_code=409, detail="Idempotency key conflict.")
+                
         except HTTPException:
             raise
         except Exception as e:
             logger.error(f"Error checking idempotency: {e}")
+            raise HTTPException(status_code=503, detail="Idempotency check failed. Service unavailable.")
 
     try:
         # Map items
@@ -386,7 +412,7 @@ async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_
             order_pb2.OrderItem(
                 product_id=item.product_id,
                 quantity=item.quantity,
-                price=item.price
+                price_cents=item.price_cents
             ) for item in request.items
         ]
         
@@ -405,6 +431,7 @@ async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_
         if idempotency_key:
             try:
                 idempotency_data = {
+                    "status": "completed",
                     "hash": req_hash,
                     "response": result
                 }
@@ -441,7 +468,7 @@ async def list_orders(customer_id: Optional[str] = None, user: dict = Depends(ve
                         {
                             "product_id": item.product_id,
                             "quantity": item.quantity,
-                            "price": item.price
+                            "price_cents": item.price_cents
                         } for item in order.items
                     ]
                 } for order in response.orders
@@ -488,7 +515,7 @@ async def get_order(order_id: str):
                 {
                     "product_id": item.product_id,
                     "quantity": item.quantity,
-                    "price": item.price
+                    "price_cents": item.price_cents
                 } for item in response.items
             ]
         }

@@ -30,6 +30,7 @@ const (
 	OrderStatus_ORDER_STATUS_PROCESSING  OrderStatus = 2
 	OrderStatus_ORDER_STATUS_COMPLETED   OrderStatus = 3
 	OrderStatus_ORDER_STATUS_CANCELLED   OrderStatus = 4
+	OrderStatus_ORDER_STATUS_FAILED      OrderStatus = 5
 )
 
 // Enum value maps for OrderStatus.
@@ -40,6 +41,7 @@ var (
 		2: "ORDER_STATUS_PROCESSING",
 		3: "ORDER_STATUS_COMPLETED",
 		4: "ORDER_STATUS_CANCELLED",
+		5: "ORDER_STATUS_FAILED",
 	}
 	OrderStatus_value = map[string]int32{
 		"ORDER_STATUS_UNSPECIFIED": 0,
@@ -47,6 +49,7 @@ var (
 		"ORDER_STATUS_PROCESSING":  2,
 		"ORDER_STATUS_COMPLETED":   3,
 		"ORDER_STATUS_CANCELLED":   4,
+		"ORDER_STATUS_FAILED":      5,
 	}
 )
 
@@ -384,8 +387,8 @@ func (x *ListOrdersResponse) GetOrders() []*GetOrderResponse {
 type OrderItem struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProductId     string                 `protobuf:"bytes,1,opt,name=product_id,json=productId,proto3" json:"product_id,omitempty"`
-	Quantity      int32                  `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
-	Price         float64                `protobuf:"fixed64,3,opt,name=price,proto3" json:"price,omitempty"`
+	Quantity      uint32                 `protobuf:"varint,2,opt,name=quantity,proto3" json:"quantity,omitempty"`
+	PriceCents    int64                  `protobuf:"varint,3,opt,name=price_cents,json=priceCents,proto3" json:"price_cents,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -427,16 +430,16 @@ func (x *OrderItem) GetProductId() string {
 	return ""
 }
 
-func (x *OrderItem) GetQuantity() int32 {
+func (x *OrderItem) GetQuantity() uint32 {
 	if x != nil {
 		return x.Quantity
 	}
 	return 0
 }
 
-func (x *OrderItem) GetPrice() float64 {
+func (x *OrderItem) GetPriceCents() int64 {
 	if x != nil {
-		return x.Price
+		return x.PriceCents
 	}
 	return 0
 }
@@ -465,18 +468,20 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"\vcustomer_id\x18\x01 \x01(\tR\n" +
 	"customerId\"H\n" +
 	"\x12ListOrdersResponse\x122\n" +
-	"\x06orders\x18\x01 \x03(\v2\x1a.order.v1.GetOrderResponseR\x06orders\"\\\n" +
+	"\x06orders\x18\x01 \x03(\v2\x1a.order.v1.GetOrderResponseR\x06orders\"g\n" +
 	"\tOrderItem\x12\x1d\n" +
 	"\n" +
 	"product_id\x18\x01 \x01(\tR\tproductId\x12\x1a\n" +
-	"\bquantity\x18\x02 \x01(\x05R\bquantity\x12\x14\n" +
-	"\x05price\x18\x03 \x01(\x01R\x05price*\x9a\x01\n" +
+	"\bquantity\x18\x02 \x01(\rR\bquantity\x12\x1f\n" +
+	"\vprice_cents\x18\x03 \x01(\x03R\n" +
+	"priceCents*\xb3\x01\n" +
 	"\vOrderStatus\x12\x1c\n" +
 	"\x18ORDER_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14ORDER_STATUS_PENDING\x10\x01\x12\x1b\n" +
 	"\x17ORDER_STATUS_PROCESSING\x10\x02\x12\x1a\n" +
 	"\x16ORDER_STATUS_COMPLETED\x10\x03\x12\x1a\n" +
-	"\x16ORDER_STATUS_CANCELLED\x10\x042\xe6\x01\n" +
+	"\x16ORDER_STATUS_CANCELLED\x10\x04\x12\x17\n" +
+	"\x13ORDER_STATUS_FAILED\x10\x052\xe6\x01\n" +
 	"\fOrderService\x12J\n" +
 	"\vCreateOrder\x12\x1c.order.v1.CreateOrderRequest\x1a\x1d.order.v1.CreateOrderResponse\x12A\n" +
 	"\bGetOrder\x12\x19.order.v1.GetOrderRequest\x1a\x1a.order.v1.GetOrderResponse\x12G\n" +

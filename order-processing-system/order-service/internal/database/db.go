@@ -8,6 +8,7 @@ import (
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var DB *gorm.DB
@@ -48,17 +49,16 @@ func InitDB() {
 }
 
 func CheckAndRecordEvent(tx *gorm.DB, eventID string, service string) bool {
-	var count int64
-	tx.Model(&models.ProcessedEvent{}).Where("event_id = ? AND service = ?", eventID, service).Count(&count)
-	if count > 0 {
-		return false
-	}
-
-	err := tx.Create(&models.ProcessedEvent{
+	res := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ProcessedEvent{
 		EventID:     eventID,
 		Service:     service,
 		ProcessedAt: time.Now(),
-	}).Error
+	})
 
-	return err == nil
+	if res.Error != nil {
+		log.Printf("Error recording event: %v", res.Error)
+		return false
+	}
+
+	return res.RowsAffected > 0
 }

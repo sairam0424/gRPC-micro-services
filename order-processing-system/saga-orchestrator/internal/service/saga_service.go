@@ -28,7 +28,7 @@ func (s *SagaService) StartOrderSaga(ctx context.Context, req *sagav1.StartOrder
 	sagaID, err := s.engine.StartOrderSaga(ctx, req.OrderId, req.Items)
 	if err != nil {
 		log.Printf("Saga Orchestrator: Failed to start saga: %v", err)
-		return nil, status.Errorf(codes.Internal, "failed to start Saga: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to initiate saga workflow")
 	}
 
 	return &sagav1.StartOrderSagaResponse{
@@ -40,10 +40,15 @@ func (s *SagaService) StartOrderSaga(ctx context.Context, req *sagav1.StartOrder
 func (s *SagaService) GetSagaStatus(ctx context.Context, req *sagav1.GetSagaStatusRequest) (*sagav1.GetSagaStatusResponse, error) {
 	instance, err := s.engine.GetSaga(ctx, req.WorkflowId)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "saga not found: %v", err)
+		log.Printf("Saga Orchestrator: Failed to get saga %s: %v", req.WorkflowId, err)
+		return nil, status.Errorf(codes.NotFound, "saga instance not found")
 	}
 
-	outputData, _ := structpb.NewStruct(instance.Data)
+	outputData, err := structpb.NewStruct(instance.Data)
+	if err != nil {
+		log.Printf("Saga Orchestrator: CRITICAL: Failed to convert instance data to structpb: %v", err)
+		// We still return the status even if data conversion fails
+	}
 
 	return &sagav1.GetSagaStatusResponse{
 		WorkflowId:  instance.ID,
