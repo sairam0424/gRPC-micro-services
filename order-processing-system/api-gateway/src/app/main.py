@@ -23,6 +23,8 @@ from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.grpc import GrpcInstrumentorClient
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
+import hashlib
+import json
 
 # Ensure generated code is in the path
 GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
@@ -356,6 +358,28 @@ async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_
                 detail=f"Product {item.product_id} is invalid or not found in our catalog."
             )
 
+    # Idempotency Check
+    idempotency_key = req_obj.headers.get("Idempotency-Key") if req_obj else None
+    if idempotency_key:
+        redis_key = f"idempotency:api:{idempotency_key}"
+        try:
+            # Generate hash of request to ensure it hasn't changed for the same key
+            req_hash = hashlib.sha256(request.json().encode() if hasattr(request, 'json') else json.dumps(request.dict()).encode()).hexdigest()
+            
+            cached_data = bloom_manager.redis_client.get(redis_key)
+            if cached_data:
+                cached_json = json.loads(cached_data)
+                if cached_json.get("hash") == req_hash:
+                    logger.info(f"Idempotency Hit: Returning cached response for key {idempotency_key}")
+                    return cached_json.get("response")
+                else:
+                    logger.warning(f"Idempotency Conflict: Key {idempotency_key} used with different payload")
+                    raise HTTPException(status_code=409, detail="Idempotency key conflict: different request payload for the same key.")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error checking idempotency: {e}")
+
     try:
         # Map items
         rpc_items = [
@@ -372,10 +396,27 @@ async def create_order(request: CreateOrderRequest, user: dict = Depends(verify_
         )
         
         response = await app.state.order_stub.CreateOrder(rpc_request)
-        return {
+        result = {
             "order_id": response.order_id,
             "status": order_pb2.OrderStatus.Name(response.status)
         }
+
+        # Store in Redis if idempotency key was provided
+        if idempotency_key:
+            try:
+                idempotency_data = {
+                    "hash": req_hash,
+                    "response": result
+                }
+                bloom_manager.redis_client.setex(
+                    redis_key,
+                    86400, # 24h TTL
+                    json.dumps(idempotency_data)
+                )
+            except Exception as e:
+                logger.error(f"Error storing idempotency data: {e}")
+
+        return result
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
             raise HTTPException(status_code=400, detail=f"Order rejected: {e.details()}")

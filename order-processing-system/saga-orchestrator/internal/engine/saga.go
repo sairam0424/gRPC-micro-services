@@ -46,6 +46,14 @@ func NewSagaEngine(redisClient *redis.Client, producer *kafka.Producer, consumer
 }
 
 func (e *SagaEngine) StartOrderSaga(ctx context.Context, orderID string, items interface{}) (string, error) {
+	// Idempotency: Check if a saga already exists for this orderID
+	orderKey := fmt.Sprintf("order:saga:%s", orderID)
+	existingSagaID, err := e.redisClient.Get(ctx, orderKey).Result()
+	if err == nil && existingSagaID != "" {
+		log.Printf("Saga Engine: Saga already exists for Order %s: %s", orderID, existingSagaID)
+		return existingSagaID, nil
+	}
+
 	sagaID := fmt.Sprintf("saga_%s_%d", orderID, time.Now().Unix())
 
 	instance := &SagaInstance{
@@ -63,6 +71,9 @@ func (e *SagaEngine) StartOrderSaga(ctx context.Context, orderID string, items i
 	if err := e.saveSaga(ctx, instance); err != nil {
 		return "", err
 	}
+
+	// Map order to saga for idempotency
+	e.redisClient.Set(ctx, orderKey, sagaID, 24*time.Hour)
 
 	// Publish First Command to Kafka
 	if err := e.publishCommand(instance, "reserve_stock"); err != nil {
@@ -121,9 +132,21 @@ func (e *SagaEngine) handleEvent(ctx context.Context, msg *kafka.Message) {
 		return
 	}
 
+	// Idempotency: Check if this event (command+status) has already been processed for this saga
+	processedKey := fmt.Sprintf("saga:processed:%s:%s:%s", sagaID, command, status)
+	isProcessed, err := e.redisClient.SetNX(ctx, processedKey, "true", 1*time.Hour).Result()
+	if err != nil {
+		log.Printf("Saga Engine: Redis error checking idempotency: %v", err)
+	} else if !isProcessed {
+		log.Printf("Saga Engine: Duplicate event detected for Saga %s, Command %s, Status %s. Skipping.", sagaID, command, status)
+		return
+	}
+
 	instance, err := e.GetSaga(ctx, sagaID)
 	if err != nil {
 		log.Printf("Saga Engine: Failed to get saga %s: %v", sagaID, err)
+		// Clean up processed key so it can be retried
+		e.redisClient.Del(ctx, processedKey)
 		return
 	}
 

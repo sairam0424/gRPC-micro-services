@@ -39,10 +39,26 @@ func InitDB() {
 	sqlDB.SetConnMaxLifetime(time.Hour) // 1 hour
 
 	// Auto migrate the schema
-	err = DB.AutoMigrate(&models.Order{}, &models.OrderItem{}, &models.Outbox{})
+	err = DB.AutoMigrate(&models.Order{}, &models.OrderItem{}, &models.Outbox{}, &models.ProcessedEvent{})
 	if err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
 
 	log.Println("Database initialized and migrated successfully with connection pooling")
+}
+
+func CheckAndRecordEvent(tx *gorm.DB, eventID string, service string) bool {
+	var count int64
+	tx.Model(&models.ProcessedEvent{}).Where("event_id = ? AND service = ?", eventID, service).Count(&count)
+	if count > 0 {
+		return false
+	}
+
+	err := tx.Create(&models.ProcessedEvent{
+		EventID:     eventID,
+		Service:     service,
+		ProcessedAt: time.Now(),
+	}).Error
+
+	return err == nil
 }

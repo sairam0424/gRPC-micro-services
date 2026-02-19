@@ -6,6 +6,7 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Real-time Order Status**: Updates via Kafka + gRPC streaming + SSE.
 
 ## Highlights
+
 - **Multi-Replica Raft Cluster**: Distributed leader election and state management using `etcd`.
 - **Metric-Based Read Routing**: Intelligent routing based on real-time CPU and connection metrics.
 - **Hybrid CDC Replication**: Postgres streaming + Kafka-based async CDC.
@@ -228,6 +229,7 @@ Base URL: `http://localhost/api`
 - `GET /inventory` -> gateway inventory check (placeholder)
 
 ### Health Check Endpoints (Direct)
+
 - `GET /api/auth/health` -> Auth Service (DB check)
 - `GET /api/inventory/health` -> Inventory Service (DB & Redis check)
 - `GET /api/orders/health` -> Order Service (DB check)
@@ -246,9 +248,11 @@ curl -X POST http://localhost/api/orders \
 
 The system implements a robust recovery mechanism for failed events using Dead Letter Queues and an Idempotent Replay strategy.
 
-- **Exponential Backoff**: Services retry failed Kafka processing with increasing delays (max 3 retries).
 - **Dead Letter Queues (DLQ)**: Events that fail all retries are published to specific DLQ topics (`service.dlq`) with full error metadata.
-- **Idempotency**: All consumers implement idempotency (DB-backed for inventory, in-memory for streamer) to safely handle replayed events.
+- **Multi-Layer Idempotency**:
+    - **API Gateway**: Uses `Idempotency-Key` headers and Redis caching to deduplicate incoming REST requests.
+    - **Saga Orchestrator**: Event-level deduplication using Redis (key: `saga:processed:{sagaId}:{command}:{status}`) ensures Saga state transitions are idempotent.
+    - **Kafka Consumers**: Database-backed deduplication using `processed_events` tables in Order and Inventory services. Atomic "check-and-record" within transactions prevents processing duplicate Kafka messages.
 - **Replay Mechanism**: A dedicated `replay-service` can republish events from DLQ topics back to the main processing path.
 - **DLQ Monitor**: A visual dashboard to inspect trapped events and errors.
 
@@ -301,10 +305,13 @@ To run the entire stack and see the system in action:
    make up-dev
    ```
 3. **Seed Data**: (Generate activity for monitoring)
+
    ```bash
    make seed
    ```
+
 4. **Observe**:
+
    Open monitoring tools using `make jaeger`, `make grafana`, or `make kafka-ui`.
 
 ## Quick Start (Docker)
