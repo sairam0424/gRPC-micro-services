@@ -75,9 +75,9 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 			// We can try to peek the event type or use a generic proto message
 			// For simplicity, we'll try to deserialize into different types
 			
-			if msg.Topic == "media.events" {
+			if msg.TopicPartition.Topic != nil && *msg.TopicPartition.Topic == "media.events" {
 				mediaEvent := &eventsv1.MediaUploadedEvent{}
-				err = c.deserializer.DeserializeInto(msg.Topic, msg.Value, mediaEvent)
+				err = c.deserializer.DeserializeInto(*msg.TopicPartition.Topic, msg.Value, mediaEvent)
 				if err == nil {
 					if mediaEvent.EntityType == "order" {
 						err = database.DB.Transaction(func(tx *gorm.DB) error {
