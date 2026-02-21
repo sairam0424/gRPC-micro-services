@@ -23,6 +23,8 @@ import { UserNav } from "./user-nav";
 import { Package2 } from "lucide-react";
 import { CreateOrderDialog } from "@/components/create-order-dialog";
 import { FilterDashboard } from "@/components/filter-dashboard";
+import { ProductCard } from "@/components/product-card";
+import { LayoutGrid, ClipboardList } from "lucide-react";
 
 export interface Order {
   order_id: string;
@@ -176,28 +178,24 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Inventory Summary */}
           <div className="space-y-6">
-            <h2 className="text-2xl font-semibold">Inventory</h2>
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
-              <div className="space-y-4">
-                {inventory.length === 0 ? (
-                  <p className="text-zinc-500 text-sm text-center py-4">Loading stock levels...</p>
-                ) : (
-                  inventory.map((item) => (
-                    <div key={item.product_id} className="flex items-center justify-between border-b border-zinc-800 pb-4 last:border-0 last:pb-0">
-                      <div className="space-y-1">
-                        <p className="text-sm font-medium">{item.product_id}</p>
-                        <p className="text-xs text-zinc-500">{item.name || `Product ${item.product_id}`}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-lg font-bold">{item.quantity}</p>
-                        <p className="text-[10px] uppercase font-bold text-zinc-500">Available</p>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-semibold flex items-center gap-2">
+                <LayoutGrid className="h-5 w-5 text-primary" />
+                Inventory
+              </h2>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-4">
+              {inventory.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/30 py-10 text-center">
+                  <p className="text-zinc-500 text-sm">Loading stock levels...</p>
+                </div>
+              ) : (
+                inventory.map((item) => (
+                  <ProductCard key={item.product_id} product={item} />
+                ))
+              )}
             </div>
 
             {/* Filter Monitoring */}

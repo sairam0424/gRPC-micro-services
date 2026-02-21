@@ -234,6 +234,7 @@ type GetOrderResponse struct {
 	CustomerId    string                 `protobuf:"bytes,2,opt,name=customer_id,json=customerId,proto3" json:"customer_id,omitempty"`
 	Items         []*OrderItem           `protobuf:"bytes,3,rep,name=items,proto3" json:"items,omitempty"`
 	Status        OrderStatus            `protobuf:"varint,4,opt,name=status,proto3,enum=order.v1.OrderStatus" json:"status,omitempty"`
+	MediaIds      []string               `protobuf:"bytes,5,rep,name=media_ids,json=mediaIds,proto3" json:"media_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -294,6 +295,13 @@ func (x *GetOrderResponse) GetStatus() OrderStatus {
 		return x.Status
 	}
 	return OrderStatus_ORDER_STATUS_UNSPECIFIED
+}
+
+func (x *GetOrderResponse) GetMediaIds() []string {
+	if x != nil {
+		return x.MediaIds
+	}
+	return nil
 }
 
 type ListOrdersRequest struct {
@@ -457,13 +465,14 @@ const file_order_v1_order_proto_rawDesc = "" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12-\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status\",\n" +
 	"\x0fGetOrderRequest\x12\x19\n" +
-	"\border_id\x18\x01 \x01(\tR\aorderId\"\xa8\x01\n" +
+	"\border_id\x18\x01 \x01(\tR\aorderId\"\xc5\x01\n" +
 	"\x10GetOrderResponse\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x1f\n" +
 	"\vcustomer_id\x18\x02 \x01(\tR\n" +
 	"customerId\x12)\n" +
 	"\x05items\x18\x03 \x03(\v2\x13.order.v1.OrderItemR\x05items\x12-\n" +
-	"\x06status\x18\x04 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status\"4\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x15.order.v1.OrderStatusR\x06status\x12\x1b\n" +
+	"\tmedia_ids\x18\x05 \x03(\tR\bmediaIds\"4\n" +
 	"\x11ListOrdersRequest\x12\x1f\n" +
 	"\vcustomer_id\x18\x01 \x01(\tR\n" +
 	"customerId\"H\n" +

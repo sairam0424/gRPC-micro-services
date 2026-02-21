@@ -40,6 +40,7 @@ message GetOrderResponse {
   string customer_id = 2;
   repeated OrderItem items = 3;
   OrderStatus status = 4;
+  repeated string media_ids = 5;
 }
 
 message ListOrdersRequest {

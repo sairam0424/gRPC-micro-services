@@ -235,6 +235,40 @@ services:
     networks:
       - grpc-net
 
+  media-service:
+    build:
+      context: ./media-service
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./media-service/src:/app/src
+    env_file:
+      - docker.env
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - DATABASE_URL=${MEDIA_DATABASE_URL}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=media-service
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8008 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8008/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      kafka:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    networks:
+      - grpc-net
+
   order-streamer:
     build:
       context: ./order-streamer
@@ -280,7 +314,7 @@ services:
       - ./web-client:/app
       - /app/node_modules
       - /app/.next
-    command: npm run dev
+    command: sh -c "npm install && npm run dev"
     depends_on:
       envoy:
         condition: service_started
@@ -705,6 +739,10 @@ services:
       mc mb local/ml-models --ignore-existing;
       mc mb local/feature-store --ignore-existing;
       mc mb local/raw-events --ignore-existing;
+      mc mb local/inventory-images --ignore-existing;
+      mc mb local/order-attachments --ignore-existing;
+      mc policy set public local/inventory-images;
+      mc policy set public local/order-attachments;
       mc admin user add local $${FLINK_S3_ACCESS_KEY} $${FLINK_S3_SECRET_KEY} || true;
       mc admin policy attach local readwrite --user $${FLINK_S3_ACCESS_KEY} || true;
       case \"$${MINIO_LICENSE}\" in

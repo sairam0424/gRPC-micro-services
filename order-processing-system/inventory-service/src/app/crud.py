@@ -96,7 +96,7 @@ async def release_stock_atomic(db: AsyncSession, order_id: str, items: list):
     await db.commit()
     return True
 
-async def update_stock_level(db: AsyncSession, product_id: str, change: int, override_quantity: int = None):
+async def update_stock_level(db: AsyncSession, product_id: str, change: int, override_quantity: int = None, media_id: str = None):
     """Update or create a product stock level. If override_quantity is provided, it sets the value directly."""
     result = await db.execute(
         select(InventoryItem).where(InventoryItem.product_id == product_id).with_for_update()
@@ -108,7 +108,8 @@ async def update_stock_level(db: AsyncSession, product_id: str, change: int, ove
         db_item = InventoryItem(
             product_id=product_id,
             name=f"Product {product_id}",
-            quantity=new_qty
+            quantity=new_qty,
+            media_id=media_id
         )
         db.add(db_item)
         # Add to catalog and update stock status
@@ -119,6 +120,10 @@ async def update_stock_level(db: AsyncSession, product_id: str, change: int, ove
             db_item.quantity = override_quantity
         else:
             db_item.quantity = max(0, db_item.quantity + change)
+        
+        if media_id:
+            db_item.media_id = media_id
+        
         filter_manager.update_stock_status(product_id, db_item.quantity > 0)
         
     await db.commit()

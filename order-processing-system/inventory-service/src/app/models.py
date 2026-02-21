@@ -8,6 +8,7 @@ class InventoryItem(Base):
     product_id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     quantity = Column(Integer, default=0)
+    media_id = Column(String, nullable=True)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):

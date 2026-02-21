@@ -370,12 +370,18 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
     async def UpdateStock(self, request, context):
         async with writer_session() as session:
             try:
-                db_item = await crud.update_stock_level(session, request.product_id, request.quantity_change)
+                db_item = await crud.update_stock_level(
+                    session, 
+                    request.product_id, 
+                    request.quantity_change,
+                    media_id=getattr(request, 'media_id', None)
+                )
                 # Always publish update event
                 await app.state.kafka.publish_inventory_update(db_item.product_id, db_item.quantity)
                 return inventory_pb2.UpdateStockResponse(
                     product_id=db_item.product_id, 
-                    new_quantity=db_item.quantity
+                    new_quantity=db_item.quantity,
+                    media_id=db_item.media_id or ""
                 )
             except Exception as e:
                 logger.error(f"Error in UpdateStock: {e}", exc_info=True)
@@ -392,7 +398,8 @@ class InventoryServicer(inventory_pb2_grpc.InventoryServiceServicer):
                         items=[
                             inventory_pb2.InventoryItem(
                                 product_id=item.product_id,
-                                quantity=item.quantity
+                                quantity=item.quantity,
+                                media_id=item.media_id or ""
                             ) for item in items
                         ]
                     )

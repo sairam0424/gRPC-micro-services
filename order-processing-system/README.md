@@ -26,8 +26,8 @@ A production-style, event-driven order platform built with gRPC, FastAPI, Go, Ka
 - **Order Service (Go)** persists orders and publishes events to Kafka.
 - **Inventory Service (FastAPI + SQLAlchemy)** provides atomic stock reservations backed by PostgreSQL, now with a **Tier-2 Cuckoo Filter** for fast in-stock checks and a **high-performance Redis Cache (Cache-Aside)** with request coalescing and jitter.
 - **Redis Stack** provides the backbone for the Bloom filters, Cuckoo filters, and the caching layer.
-- **Order Streamer (Go)** consumes Kafka events and exposes a gRPC server-streaming API.
-- **Web Client (Next.js)** consumes REST + SSE to display live order updates.
+- **Media Service (Premium Metadata)**: Cloud-native media storage (MinIO) with Neon PostgreSQL metadata and gRPC-based event propagation.
+- **Premium Web Dashboard**: Next-js based enterprise dashboard featuring Aceternity UI and Shadcn components for high-fidelity visualization.
 - **Nginx Proxy** routes `/` to the UI and `/api` to the gateway.
 - **Envoy Proxy**: High-performance L7 load balancer for gRPC and HTTP/2 traffic distribution using Least Connection + Consistent Hashing.
 - **Nginx Proxy**: Edge ingress routing for frontend and API traffic.
@@ -215,6 +215,7 @@ To get the full Leader-Replica + CDC flow running with Neon:
 - **order-service**: internal `:50051` (gRPC)
 - **inventory-service**: internal `:50052` (gRPC + REST health)
 - **order-streamer**: internal `:50053` (gRPC streaming)
+- **media-service**: internal `:50054` (gRPC + REST) - Cloud metadata via Neon
 - **kafka**: `localhost:9094` (external), `kafka:29092` (internal)
 - **postgres**: via `DATABASE_URL` (Neon or local)
 

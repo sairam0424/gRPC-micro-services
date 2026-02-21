@@ -38,6 +38,11 @@ class KafkaManager:
             {'use.deprecated.format': False}
         )
         
+        self.media_uploaded_deserializer = ProtobufDeserializer(
+            events_pb2.MediaUploadedEvent,
+            {'use.deprecated.format': False}
+        )
+        
         # Initialize Protobuf serializer for outgoing events
         self.inventory_reserved_serializer = ProtobufSerializer(
             events_pb2.InventoryReservedEvent,
@@ -76,8 +81,9 @@ class KafkaManager:
     def start(self):
         """Start consuming messages"""
         self.running = True
-        self.consumer.subscribe([self.topic_in])
-        logger.info(f"Kafka Manager started, subscribed to {self.topic_in}")
+        topics = [self.topic_in, "media.events"]
+        self.consumer.subscribe(topics)
+        logger.info(f"Kafka Manager started, subscribed to {topics}")
         
         try:
             while self.running:
@@ -104,6 +110,8 @@ class KafkaManager:
                             self._handle_order_created_sync(event)
                         elif event.event_type == "inventory.updated":
                             self._handle_inventory_updated_sync(event)
+                        elif event.event_type == "media.uploaded":
+                            self._handle_media_uploaded_sync(event)
                         
                         # Manual Commit after successful sync handling
                         self.consumer.commit(asynchronous=False)
@@ -142,7 +150,24 @@ class KafkaManager:
                 )
                 return event
             except Exception:
-                # If that fails, try InventoryUpdatedEvent
+                # Fallback: Try MediaUploadedEvent
+                try:
+                    event = self.media_uploaded_deserializer(
+                        msg.value(),
+                        SerializationContext(msg.topic(), MessageField.VALUE)
+                    )
+                    return event
+                except Exception:
+                    # Final fallback: Try raw JSON (for media-service compatibility)
+                    try:
+                        data = json.loads(msg.value().decode('utf-8'))
+                        if data.get("event_type") == "media.uploaded":
+                            # Map JSON to Protobuf-like object for handler consistency
+                            from types import SimpleNamespace
+                            return SimpleNamespace(**data)
+                    except Exception as json_e:
+                        logger.debug(f"JSON fallback failed: {json_e}")
+                    
                 event = self.inventory_updated_deserializer(
                     msg.value(),
                     SerializationContext(msg.topic(), MessageField.VALUE)
@@ -170,6 +195,16 @@ class KafkaManager:
         asyncio.set_event_loop(loop)
         try:
             loop.run_until_complete(self.handle_inventory_updated(event))
+        finally:
+            loop.close()
+
+    def _handle_media_uploaded_sync(self, event):
+        """Handle media.uploaded event synchronously"""
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(self.handle_media_uploaded(event))
         finally:
             loop.close()
 
@@ -304,3 +339,26 @@ class KafkaManager:
                 except Exception as e:
                     logger.error(f"Async Replication failed for {product_id}: {e}")
                     await session.rollback()
+
+    async def handle_media_uploaded(self, event):
+        """Handle media.uploaded event to associate media with entities"""
+        media_id = getattr(event, 'media_id', None)
+        entity_type = getattr(event, 'entity_type', None)
+        entity_id = getattr(event, 'entity_id', None)
+
+        if not all([media_id, entity_type, entity_id]):
+            logger.warning(f"Incomplete media.uploaded event: {event}")
+            return
+
+        if entity_type == "inventory":
+            logger.info(f"Associating media {media_id} with product {entity_id}")
+            async with writer_session() as session:
+                try:
+                    await crud.update_stock_level(session, entity_id, 0, media_id=str(media_id))
+                    await session.commit()
+                    logger.info(f"Successfully associated media {media_id} with product {entity_id}")
+                except Exception as e:
+                    logger.error(f"Failed to associate media with product: {e}")
+                    await session.rollback()
+        else:
+            logger.debug(f"Media event for non-inventory entity: {entity_type}")

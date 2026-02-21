@@ -226,7 +226,8 @@ async def list_inventory():
             "inventory": [
                 {
                     "product_id": item.product_id,
-                    "quantity": item.quantity
+                    "quantity": item.quantity,
+                    "media_id": getattr(item, 'media_id', "")
                 } for item in response.items
             ]
         }
@@ -517,12 +518,65 @@ async def get_order(order_id: str):
                     "quantity": item.quantity,
                     "price_cents": item.price_cents
                 } for item in response.items
-            ]
+            ],
+            "media_ids": list(response.media_ids) if hasattr(response, "media_ids") else []
         }
     except grpc.RpcError as e:
         if e.code() == grpc.StatusCode.NOT_FOUND:
             raise HTTPException(status_code=404, detail="Order not found")
         raise HTTPException(status_code=503, detail=f"Order Service unavailable: {e.details()}")
+
+class MediaUploadURLRequest(BaseModel):
+    entity_type: str
+    entity_id: str
+    file_name: str
+    content_type: str
+
+@app.post("/media/upload-url", dependencies=[Depends(verify_jwt)])
+async def get_media_upload_url(request: MediaUploadURLRequest):
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"http://{os.getenv('MEDIA_SERVICE_HOST', 'media-service')}:8008/media/upload-url",
+                json=request.dict(),
+                timeout=5.0
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=resp.text)
+            return resp.json()
+        except Exception as e:
+            logger.error(f"Media Service call failed: {e}")
+            raise HTTPException(status_code=503, detail=f"Media Service unavailable: {e}")
+
+@app.get("/media/{media_id}/view-url", dependencies=[Depends(verify_jwt)])
+async def get_media_view_url(media_id: str):
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(
+                f"http://{os.getenv('MEDIA_SERVICE_HOST', 'media-service')}:8008/media/{media_id}/view-url",
+                timeout=5.0
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=resp.text)
+            return resp.json()
+        except Exception as e:
+            logger.error(f"Media Service call failed: {e}")
+            raise HTTPException(status_code=503, detail=f"Media Service unavailable: {e}")
+
+@app.post("/media/{media_id}/confirm-upload", dependencies=[Depends(verify_jwt)])
+async def confirm_media_upload(media_id: str):
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.post(
+                f"http://{os.getenv('MEDIA_SERVICE_HOST', 'media-service')}:8008/media/{media_id}/confirm-upload",
+                timeout=5.0
+            )
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail=resp.text)
+            return resp.json()
+        except Exception as e:
+            logger.error(f"Media Service call failed: {e}")
+            raise HTTPException(status_code=503, detail=f"Media Service unavailable: {e}")
 
 @app.get("/me")
 async def get_me(user: dict = Depends(verify_jwt), req_obj: Request = None):

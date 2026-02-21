@@ -190,6 +190,9 @@ es-health:
 analytics-logs:
 	docker compose -f docker-compose.dev.yml logs -f analytics-pipeline
 
+media-logs:
+	docker compose -f docker-compose.dev.yml logs -f media-service
+
 flink-logs:
 	docker compose -f docker-compose.dev.yml logs -f flink-jobmanager flink-taskmanager
 
