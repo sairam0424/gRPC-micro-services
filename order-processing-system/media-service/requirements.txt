@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+minio
+sqlalchemy[asyncio]
+asyncpg
+aiokafka
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-exporter-otlp
+pydantic
+python-dotenv
+python-multipart
+httpx

@@ -457,6 +457,106 @@ func (x *InventoryUpdatedEvent) GetTimestamp() int64 {
 	return 0
 }
 
+type MediaUploadedEvent struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	EventId       string                 `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
+	EventType     string                 `protobuf:"bytes,2,opt,name=event_type,json=eventType,proto3" json:"event_type,omitempty"`
+	MediaId       string                 `protobuf:"bytes,3,opt,name=media_id,json=mediaId,proto3" json:"media_id,omitempty"`
+	EntityType    string                 `protobuf:"bytes,4,opt,name=entity_type,json=entityType,proto3" json:"entity_type,omitempty"`
+	EntityId      string                 `protobuf:"bytes,5,opt,name=entity_id,json=entityId,proto3" json:"entity_id,omitempty"`
+	ObjectKey     string                 `protobuf:"bytes,6,opt,name=object_key,json=objectKey,proto3" json:"object_key,omitempty"`
+	Bucket        string                 `protobuf:"bytes,7,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	Timestamp     int64                  `protobuf:"varint,8,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MediaUploadedEvent) Reset() {
+	*x = MediaUploadedEvent{}
+	mi := &file_events_v1_events_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MediaUploadedEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MediaUploadedEvent) ProtoMessage() {}
+
+func (x *MediaUploadedEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_events_v1_events_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MediaUploadedEvent.ProtoReflect.Descriptor instead.
+func (*MediaUploadedEvent) Descriptor() ([]byte, []int) {
+	return file_events_v1_events_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *MediaUploadedEvent) GetEventId() string {
+	if x != nil {
+		return x.EventId
+	}
+	return ""
+}
+
+func (x *MediaUploadedEvent) GetEventType() string {
+	if x != nil {
+		return x.EventType
+	}
+	return ""
+}
+
+func (x *MediaUploadedEvent) GetMediaId() string {
+	if x != nil {
+		return x.MediaId
+	}
+	return ""
+}
+
+func (x *MediaUploadedEvent) GetEntityType() string {
+	if x != nil {
+		return x.EntityType
+	}
+	return ""
+}
+
+func (x *MediaUploadedEvent) GetEntityId() string {
+	if x != nil {
+		return x.EntityId
+	}
+	return ""
+}
+
+func (x *MediaUploadedEvent) GetObjectKey() string {
+	if x != nil {
+		return x.ObjectKey
+	}
+	return ""
+}
+
+func (x *MediaUploadedEvent) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
+func (x *MediaUploadedEvent) GetTimestamp() int64 {
+	if x != nil {
+		return x.Timestamp
+	}
+	return 0
+}
+
 var File_events_v1_events_proto protoreflect.FileDescriptor
 
 const file_events_v1_events_proto_rawDesc = "" +
@@ -508,7 +608,19 @@ const file_events_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"product_id\x18\x03 \x01(\tR\tproductId\x12\x1a\n" +
 	"\bquantity\x18\x04 \x01(\rR\bquantity\x12\x1c\n" +
-	"\ttimestamp\x18\x05 \x01(\x03R\ttimestampBZZXgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1;eventsv1b\x06proto3"
+	"\ttimestamp\x18\x05 \x01(\x03R\ttimestamp\"\xfc\x01\n" +
+	"\x12MediaUploadedEvent\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1d\n" +
+	"\n" +
+	"event_type\x18\x02 \x01(\tR\teventType\x12\x19\n" +
+	"\bmedia_id\x18\x03 \x01(\tR\amediaId\x12\x1f\n" +
+	"\ventity_type\x18\x04 \x01(\tR\n" +
+	"entityType\x12\x1b\n" +
+	"\tentity_id\x18\x05 \x01(\tR\bentityId\x12\x1d\n" +
+	"\n" +
+	"object_key\x18\x06 \x01(\tR\tobjectKey\x12\x16\n" +
+	"\x06bucket\x18\a \x01(\tR\x06bucket\x12\x1c\n" +
+	"\ttimestamp\x18\b \x01(\x03R\ttimestampBZZXgithub.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/events/v1;eventsv1b\x06proto3"
 
 var (
 	file_events_v1_events_proto_rawDescOnce sync.Once
@@ -522,13 +634,14 @@ func file_events_v1_events_proto_rawDescGZIP() []byte {
 	return file_events_v1_events_proto_rawDescData
 }
 
-var file_events_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_events_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_events_v1_events_proto_goTypes = []any{
 	(*OrderItem)(nil),              // 0: events.v1.OrderItem
 	(*OrderCreatedEvent)(nil),      // 1: events.v1.OrderCreatedEvent
 	(*InventoryReservedEvent)(nil), // 2: events.v1.InventoryReservedEvent
 	(*InventoryFailedEvent)(nil),   // 3: events.v1.InventoryFailedEvent
 	(*InventoryUpdatedEvent)(nil),  // 4: events.v1.InventoryUpdatedEvent
+	(*MediaUploadedEvent)(nil),     // 5: events.v1.MediaUploadedEvent
 }
 var file_events_v1_events_proto_depIdxs = []int32{
 	0, // 0: events.v1.OrderCreatedEvent.items:type_name -> events.v1.OrderItem
@@ -552,7 +665,7 @@ func file_events_v1_events_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_events_v1_events_proto_rawDesc), len(file_events_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

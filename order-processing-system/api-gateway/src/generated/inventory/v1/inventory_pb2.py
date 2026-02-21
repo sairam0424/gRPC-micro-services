@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cinventory/v1/inventory.proto\x12\x0cinventory.v1\"\x16\n\x14ListInventoryRequest\"C\n\x15ListInventoryResponse\x12*\n\x05items\x18\x01 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"\'\n\x11\x43heckStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\":\n\x12\x43heckStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\r\"S\n\x13ReserveStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"8\n\x14ReserveStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"S\n\x13ReleaseStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"\'\n\x14ReleaseStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"A\n\x12UpdateStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x17\n\x0fquantity_change\x18\x02 \x01(\x05\"?\n\x13UpdateStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x14\n\x0cnew_quantity\x18\x02 \x01(\r\"5\n\rInventoryItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\r2\xbf\x03\n\x10InventoryService\x12O\n\nCheckStock\x12\x1f.inventory.v1.CheckStockRequest\x1a .inventory.v1.CheckStockResponse\x12U\n\x0cReserveStock\x12!.inventory.v1.ReserveStockRequest\x1a\".inventory.v1.ReserveStockResponse\x12U\n\x0cReleaseStock\x12!.inventory.v1.ReleaseStockRequest\x1a\".inventory.v1.ReleaseStockResponse\x12R\n\x0bUpdateStock\x12 .inventory.v1.UpdateStockRequest\x1a!.inventory.v1.UpdateStockResponse\x12X\n\rListInventory\x12\".inventory.v1.ListInventoryRequest\x1a#.inventory.v1.ListInventoryResponseB`Z^github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1;inventoryv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1cinventory/v1/inventory.proto\x12\x0cinventory.v1\"\x16\n\x14ListInventoryRequest\"C\n\x15ListInventoryResponse\x12*\n\x05items\x18\x01 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"\'\n\x11\x43heckStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\"L\n\x12\x43heckStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\r\x12\x10\n\x08media_id\x18\x03 \x01(\t\"S\n\x13ReserveStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"8\n\x14ReserveStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x12\x0f\n\x07message\x18\x02 \x01(\t\"S\n\x13ReleaseStockRequest\x12\x10\n\x08order_id\x18\x01 \x01(\t\x12*\n\x05items\x18\x02 \x03(\x0b\x32\x1b.inventory.v1.InventoryItem\"\'\n\x14ReleaseStockResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"S\n\x12UpdateStockRequest\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x17\n\x0fquantity_change\x18\x02 \x01(\x05\x12\x10\n\x08media_id\x18\x03 \x01(\t\"Q\n\x13UpdateStockResponse\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x14\n\x0cnew_quantity\x18\x02 \x01(\r\x12\x10\n\x08media_id\x18\x03 \x01(\t\"G\n\rInventoryItem\x12\x12\n\nproduct_id\x18\x01 \x01(\t\x12\x10\n\x08quantity\x18\x02 \x01(\r\x12\x10\n\x08media_id\x18\x03 \x01(\t2\xbf\x03\n\x10InventoryService\x12O\n\nCheckStock\x12\x1f.inventory.v1.CheckStockRequest\x1a .inventory.v1.CheckStockResponse\x12U\n\x0cReserveStock\x12!.inventory.v1.ReserveStockRequest\x1a\".inventory.v1.ReserveStockResponse\x12U\n\x0cReleaseStock\x12!.inventory.v1.ReleaseStockRequest\x1a\".inventory.v1.ReleaseStockResponse\x12R\n\x0bUpdateStock\x12 .inventory.v1.UpdateStockRequest\x1a!.inventory.v1.UpdateStockResponse\x12X\n\rListInventory\x12\".inventory.v1.ListInventoryRequest\x1a#.inventory.v1.ListInventoryResponseB`Z^github.com/sairam0424/gRPC-micro-services/order-service/pkg/generated/inventory/v1;inventoryv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -39,21 +39,21 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_CHECKSTOCKREQUEST']._serialized_start=139
   _globals['_CHECKSTOCKREQUEST']._serialized_end=178
   _globals['_CHECKSTOCKRESPONSE']._serialized_start=180
-  _globals['_CHECKSTOCKRESPONSE']._serialized_end=238
-  _globals['_RESERVESTOCKREQUEST']._serialized_start=240
-  _globals['_RESERVESTOCKREQUEST']._serialized_end=323
-  _globals['_RESERVESTOCKRESPONSE']._serialized_start=325
-  _globals['_RESERVESTOCKRESPONSE']._serialized_end=381
-  _globals['_RELEASESTOCKREQUEST']._serialized_start=383
-  _globals['_RELEASESTOCKREQUEST']._serialized_end=466
-  _globals['_RELEASESTOCKRESPONSE']._serialized_start=468
-  _globals['_RELEASESTOCKRESPONSE']._serialized_end=507
-  _globals['_UPDATESTOCKREQUEST']._serialized_start=509
-  _globals['_UPDATESTOCKREQUEST']._serialized_end=574
-  _globals['_UPDATESTOCKRESPONSE']._serialized_start=576
-  _globals['_UPDATESTOCKRESPONSE']._serialized_end=639
-  _globals['_INVENTORYITEM']._serialized_start=641
-  _globals['_INVENTORYITEM']._serialized_end=694
-  _globals['_INVENTORYSERVICE']._serialized_start=697
-  _globals['_INVENTORYSERVICE']._serialized_end=1144
+  _globals['_CHECKSTOCKRESPONSE']._serialized_end=256
+  _globals['_RESERVESTOCKREQUEST']._serialized_start=258
+  _globals['_RESERVESTOCKREQUEST']._serialized_end=341
+  _globals['_RESERVESTOCKRESPONSE']._serialized_start=343
+  _globals['_RESERVESTOCKRESPONSE']._serialized_end=399
+  _globals['_RELEASESTOCKREQUEST']._serialized_start=401
+  _globals['_RELEASESTOCKREQUEST']._serialized_end=484
+  _globals['_RELEASESTOCKRESPONSE']._serialized_start=486
+  _globals['_RELEASESTOCKRESPONSE']._serialized_end=525
+  _globals['_UPDATESTOCKREQUEST']._serialized_start=527
+  _globals['_UPDATESTOCKREQUEST']._serialized_end=610
+  _globals['_UPDATESTOCKRESPONSE']._serialized_start=612
+  _globals['_UPDATESTOCKRESPONSE']._serialized_end=693
+  _globals['_INVENTORYITEM']._serialized_start=695
+  _globals['_INVENTORYITEM']._serialized_end=766
+  _globals['_INVENTORYSERVICE']._serialized_start=769
+  _globals['_INVENTORYSERVICE']._serialized_end=1216
 # @@protoc_insertion_point(module_scope)
