@@ -11,6 +11,7 @@ type Order struct {
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
 	Items      []OrderItem `gorm:"foreignKey:OrderID"`
+	MediaIDs   []string    `gorm:"type:text[]"`
 }
 
 type OrderItem struct {

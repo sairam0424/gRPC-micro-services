@@ -36,6 +36,7 @@ message CheckStockRequest {
 message CheckStockResponse {
   string product_id = 1;
   uint32 quantity = 2;
+  string media_id = 3;
 }
 
 message ReserveStockRequest {
@@ -60,14 +61,17 @@ message ReleaseStockResponse {
 message UpdateStockRequest {
   string product_id = 1;
   int32 quantity_change = 2; // Positive to add, negative to remove
+  string media_id = 3;
 }
 
 message UpdateStockResponse {
   string product_id = 1;
   uint32 new_quantity = 2;
+  string media_id = 3;
 }
 
 message InventoryItem {
   string product_id = 1;
   uint32 quantity = 2;
+  string media_id = 3;
 }

@@ -51,9 +51,10 @@ func NewOrderConsumer(brokers []string, topic, groupID string, producer *Produce
 func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 	log.Printf("Order Service Consumer started on topic: %s", topic)
 
-	err := c.consumer.Subscribe(topic, nil)
+	topics := []string{topic, "media.events"}
+	err := c.consumer.SubscribeTopics(topics, nil)
 	if err != nil {
-		log.Fatalf("Failed to subscribe to topic: %v", err)
+		log.Fatalf("Failed to subscribe to topics: %v", err)
 	}
 
 	for {
@@ -70,6 +71,30 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 			// Deserialize using official deserializer
 			// Note: The deserializer will automatically pick the right message type if registered
 			// or we can specify the target type.
+			// Generic event type check
+			// We can try to peek the event type or use a generic proto message
+			// For simplicity, we'll try to deserialize into different types
+			
+			if msg.Topic == "media.events" {
+				mediaEvent := &eventsv1.MediaUploadedEvent{}
+				err = c.deserializer.DeserializeInto(msg.Topic, msg.Value, mediaEvent)
+				if err == nil {
+					if mediaEvent.EntityType == "order" {
+						err = database.DB.Transaction(func(tx *gorm.DB) error {
+							if !database.CheckAndRecordEvent(tx, mediaEvent.EventId, "order-service") {
+								return nil
+							}
+							return c.handleMediaUploaded(tx, mediaEvent)
+						})
+						if err != nil {
+							log.Printf("Error handling media event: %v", err)
+						}
+					}
+					c.consumer.CommitMessage(msg)
+					continue
+				}
+			}
+
 			event := &eventsv1.InventoryReservedEvent{}
 			err = c.deserializer.DeserializeInto(topic, msg.Value, event)
 			if err != nil {
@@ -137,6 +162,32 @@ func (c *OrderConsumer) handleInventoryFailed(tx *gorm.DB, event *eventsv1.Inven
 
 	// Publish order.updated event
 	c.publishOrderUpdate(event, "FAILED")
+}
+
+func (c *OrderConsumer) handleMediaUploaded(tx *gorm.DB, event *eventsv1.MediaUploadedEvent) error {
+	log.Printf("Associating media %s with order %s", event.MediaId, event.EntityId)
+
+	var order models.Order
+	if err := tx.Where("order_id = ?", event.EntityId).First(&order).Error; err != nil {
+		return fmt.Errorf("failed to find order: %w", err)
+	}
+
+	// Append media ID if not already present
+	found := false
+	for _, m := range order.MediaIDs {
+		if m == event.MediaId {
+			found = true
+			break
+		}
+	}
+	if !found {
+		order.MediaIDs = append(order.MediaIDs, event.MediaId)
+		if err := tx.Save(&order).Error; err != nil {
+			return fmt.Errorf("failed to update order media IDs: %w", err)
+		}
+	}
+
+	return nil
 }
 
 func (c *OrderConsumer) publishOrderUpdate(event *eventsv1.InventoryReservedEvent, status string) {

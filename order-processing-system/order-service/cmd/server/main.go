@@ -209,6 +209,7 @@ func mapDBOrderToPB(dbOrder *models.Order) *orderv1.GetOrderResponse {
 		CustomerId: dbOrder.CustomerID,
 		Items:      pbItems,
 		Status:     orderStatus,
+		MediaIds:   dbOrder.MediaIDs,
 	}
 }
 
