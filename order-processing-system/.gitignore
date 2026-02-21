@@ -40,3 +40,7 @@ pkg/generated/
 # OS
 .DS_Store
 .env
+docker.env
+.env.docker
+*.env
+*.env.*
