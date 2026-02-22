@@ -3,6 +3,9 @@ on:
   schedule:
     - cron: 'daily'
 
+env:
+  GH_AW_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+
 permissions:
   contents: read
   issues: read  # Write operations are handled through safe-outputs for security
