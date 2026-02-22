@@ -100,16 +100,17 @@ If multiple people edit the same workflow, conflicts often occur in the `.lock.y
 2. Run `gh aw compile` to regenerate the `.lock.yml` and resolve its conflicts automatically.
 3. Commit both files.
 
-## 🔐 Using Secrets
+### Secret Mapping Reference
 
-If you have a custom GitHub Personal Access Token (PAT) like `GH_PAT`, you can map it in the workflow's frontmatter so the agent can use it:
+If you are using a custom PAT name like `GH_PAT`, you can map it in the workflow frontmatter as a fallback:
 
 ```yaml
 env:
   GH_AW_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+  COPILOT_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 ```
 
-This mapping ensures that the agentic tools (like the GitHub MCP server) use your provided PAT instead of the default limited `GITHUB_TOKEN`.
+However, the compiled workflow code is optimized to look for `GH_AW_GITHUB_TOKEN` and `COPILOT_GITHUB_TOKEN` directly in your repository secrets. It is **highly recommended** to set those exact names in GitHub to avoid authentication issues.
 
 ---
 
@@ -138,3 +139,13 @@ This mapping ensures that the agentic tools (like the GitHub MCP server) use you
 - [Detailed Reference](./agentic-workflows/reference.md)
 - [Troubleshooting Guide](./agentic-workflows/troubleshooting.md)
 - [Official Documentation](https://github.github.io/gh-aw/)
+
+## 🔑 Required Secrets
+
+For workflows to run successfully, you **must** configure the following secrets in your GitHub repository (**Settings > Secrets and variables > Actions**):
+
+1. **`COPILOT_GITHUB_TOKEN`**: A token authorized to use the GitHub Copilot API.
+2. **`GH_AW_GITHUB_TOKEN`**: A Personal Access Token (PAT) with `repo` and `workflow` scopes.
+
+> [!TIP]
+> You can create a single PAT with the necessary scopes and use its value for **both** secrets above. 

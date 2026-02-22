@@ -5,6 +5,7 @@ on:
 
 env:
   GH_AW_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+  COPILOT_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
 permissions:
   contents: read

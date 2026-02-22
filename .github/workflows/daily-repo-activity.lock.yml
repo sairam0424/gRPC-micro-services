@@ -22,7 +22,7 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# frontmatter-hash: 09fdd547fb5fc86aa3f0dce44cb971d36e0bad9b4511c2f7ffc5aa4bb94b2c46
+# frontmatter-hash: 956ecc12aa85e0bb0733980486c0b30c41be20ab3e97b4529647336fb6632573
 
 name: "Daily Repository Activity Report"
 "on":
@@ -39,6 +39,7 @@ concurrency:
 run-name: "Daily Repository Activity Report"
 
 env:
+  COPILOT_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
   GH_AW_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
 jobs:
