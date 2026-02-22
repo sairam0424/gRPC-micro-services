@@ -1,7 +1,7 @@
 ---
 on:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: 'daily'
 
 permissions:
   contents: read

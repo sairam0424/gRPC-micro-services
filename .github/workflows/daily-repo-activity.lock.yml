@@ -22,12 +22,13 @@
 # For more information: https://github.github.com/gh-aw/introduction/overview/
 #
 #
-# frontmatter-hash: 9d99a30372966af35ae28ef3e19589f1a4e21e816a5e8d069e0b70759d855b05
+# frontmatter-hash: a77193c5283cbef55dc4de40f8c4916075d9ef3be7eddcae564eccbb8c0c70b9
 
 name: "Daily Repository Activity Report"
 "on":
   schedule:
-  - cron: "0 9 * * *"
+  - cron: "34 9 * * *"
+    # Friendly format: daily (scattered)
   workflow_dispatch:
 
 permissions: {}
