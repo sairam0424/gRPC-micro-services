@@ -42,7 +42,7 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: (order: 
             {
               product_id: productId,
               quantity: quantity,
-              price: 10.0
+              price_cents: 1000
             }
           ]
         })
@@ -58,7 +58,15 @@ export function CreateOrderDialog({ onOrderCreated }: { onOrderCreated: (order: 
         setQuantity(1);
       } else {
         const data = await response.json();
-        setError(data.detail || "Failed to create order");
+        if (data.detail && typeof data.detail === "object") {
+          // Flatten Pydantic/FastAPI validation errors
+          const errorMsg = Array.isArray(data.detail) 
+            ? data.detail.map((err: any) => `${err.loc.join('.')}: ${err.msg}`).join(", ")
+            : JSON.stringify(data.detail);
+          setError(errorMsg);
+        } else {
+          setError(data.detail || "Failed to create order");
+        }
       }
     } catch (error) {
       console.error("Error creating order:", error);

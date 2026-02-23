@@ -195,6 +195,44 @@ services:
       - public-data-network
       - internal-control-network # Needs Schema Registry and ETCD
 
+  media-service:
+    build:
+      context: ./media-service
+    ports:
+      - "8008:8008"
+    volumes:
+      - ./media-service/src:/app/src
+    env_file:
+      - .env
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - DATABASE_URL=${MEDIA_DATABASE_URL}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT}
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      - MINIO_PUBLIC_ENDPOINT=${MINIO_PUBLIC_ENDPOINT}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+      - OTEL_SERVICE_NAME=media-service
+    command: uvicorn src.app.main:app --host 0.0.0.0 --port 8008 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8008/health\")' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      kafka:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - public-data-network
+
   order-streamer:
     build:
       context: ./order-streamer
@@ -315,8 +353,8 @@ services:
       test: ["CMD-SHELL", "nc -z localhost 29092 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 60s
+      retries: 10
+      start_period: 120s
 
   zookeeper:
     image: confluentinc/cp-zookeeper:7.4.0
@@ -378,10 +416,10 @@ services:
       - public-data-network
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"' || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 60s
+      interval: 15s
+      timeout: 10s
+      retries: 15
+      start_period: 180s
 
   clickhouse:
     image: clickhouse/clickhouse-server:latest
@@ -398,10 +436,10 @@ services:
       - public-data-network
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
 
   minio:
     image: minio/minio:latest

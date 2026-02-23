@@ -12,3 +12,4 @@ pydantic
 python-dotenv
 python-multipart
 httpx
+opentelemetry-instrumentation-logging

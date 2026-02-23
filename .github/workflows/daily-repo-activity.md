@@ -1,7 +1,11 @@
 ---
 on:
   schedule:
-    - cron: '0 9 * * *'
+    - cron: 'daily'
+
+env:
+  GH_AW_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+  COPILOT_GITHUB_TOKEN: ${{ secrets.GH_PAT }}
 
 permissions:
   contents: read
