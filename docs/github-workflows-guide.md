@@ -39,6 +39,7 @@ Open the `.md` file. The structure includes:
 Always use fuzzy schedules to avoid hitting GitHub API load spikes:
 
 ```yaml
+ 
 on:
   schedule:
     - cron: 'daily'  # Use 'daily', 'weekly', or 'monthly' instead of fixed UTC times
@@ -148,4 +149,4 @@ For workflows to run successfully, you **must** configure the following secrets 
 2. **`GH_AW_GITHUB_TOKEN`**: A Personal Access Token (PAT) with `repo` and `workflow` scopes.
 
 > [!TIP]
-> You can create a single PAT with the necessary scopes and use its value for **both** secrets above. 
+> You can create a single PAT with the necessary scopes and use its value for **both** secrets above.

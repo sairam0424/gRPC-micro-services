@@ -25,7 +25,11 @@ export const ProductImage: React.FC<ProductImageProps> = ({
 
   useEffect(() => {
     const fetchUrl = async () => {
-      if (!mediaId || !token) {
+      if (
+        !mediaId ||
+        !token ||
+        mediaId === "550e8400-e29b-41d4-a716-446655440000"
+      ) {
         setLoading(false);
         return;
       }
@@ -38,11 +42,23 @@ export const ProductImage: React.FC<ProductImageProps> = ({
           },
         });
 
-        if (!response.ok) throw new Error("Failed to fetch image URL");
-        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(
+            `Failed to fetch image URL for ${mediaId}. Status: ${response.status}`,
+            errorText,
+          );
+          throw new Error("Failed to fetch image URL");
+        }
+
         const data = await response.json();
-        setImageUrl(data.view_url);
-        setError(false);
+        if (!data.view_url) {
+          console.warn(`No view_url returned for media ${mediaId}`);
+          setError(true);
+        } else {
+          setImageUrl(data.view_url);
+          setError(false);
+        }
       } catch (err) {
         console.error("Error fetching image URL:", err);
         setError(true);
@@ -65,7 +81,7 @@ export const ProductImage: React.FC<ProductImageProps> = ({
       className={cn(
         "relative flex items-center justify-center overflow-hidden rounded-xl bg-zinc-900",
         aspectClass,
-        className
+        className,
       )}
     >
       {loading ? (
