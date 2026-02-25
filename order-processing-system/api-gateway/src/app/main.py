@@ -592,7 +592,7 @@ async def get_me(user: dict = Depends(verify_jwt), req_obj: Request = None):
         "username": req_obj.state.username
     }
 
-@app.get("/orders/search", dependencies=[Depends(verify_jwt)])
+@app.get("/orders/search")
 async def search_orders(q: str):
     """
     Search orders in Elasticsearch
@@ -616,7 +616,7 @@ async def search_orders(q: str):
         # If index doesn't exist yet, return empty
         return {"total": 0, "orders": [], "error": str(e)}
 
-@app.get("/analytics/flow", dependencies=[Depends(verify_jwt)])
+@app.get("/analytics/flow")
 async def get_analytics_flow():
     """
     Returns metadata about the streaming flow for visualization
