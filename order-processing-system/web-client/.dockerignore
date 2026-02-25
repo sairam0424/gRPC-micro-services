@@ -1,4 +1,9 @@
+.git
+.venv
+__pycache__
 node_modules
+.pytest_cache
+*.pyc
 .next
 out
 build
@@ -14,6 +19,6 @@ yarn-error.log*
 .env
 .idea
 .vscode
-*.md
+.DS_Store
 Dockerfile
 .dockerignore

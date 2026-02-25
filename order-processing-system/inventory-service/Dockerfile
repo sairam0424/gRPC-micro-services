@@ -18,12 +18,15 @@ RUN uv venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 COPY pyproject.toml .
-RUN mkdir src
-COPY src/ ./src/
+RUN mkdir -p src/app && touch src/__init__.py src/app/__init__.py
 
 # Install protobuf and project using uv (parallel install)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install protobuf==4.25.1 && \
+    uv pip install .
+
+COPY src/ ./src/
+RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install .
 
 # Final stage
