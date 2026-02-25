@@ -227,6 +227,8 @@ Base URL: `http://localhost/api`
 - `GET /orders` -> list orders (`customer_id` optional)
 - `GET /orders/{order_id}` -> fetch order
 - `GET /orders/events` -> SSE stream of live updates
+- `GET /orders/search?q={query}` -> search orders via Elasticsearch
+- `GET /analytics/flow` -> fetch streaming pipeline flow metadata
 - `GET /inventory` -> gateway inventory check (placeholder)
 
 ### Health Check Endpoints (Direct)

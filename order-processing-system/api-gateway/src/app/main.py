@@ -25,6 +25,7 @@ from opentelemetry.instrumentation.grpc import GrpcInstrumentorClient
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 import hashlib
 import json
+from elasticsearch import AsyncElasticsearch
 
 # Ensure generated code is in the path
 GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
@@ -49,10 +50,16 @@ async def lifespan(app: FastAPI):
     app.state.inventory_stub = inventory_pb2_grpc.InventoryServiceStub(app.state.inventory_channel)
     app.state.stream_stub = stream_pb2_grpc.StreamServiceStub(app.state.stream_channel)
     
+    # Elasticsearch Client init
+    es_host = os.getenv("ELASTICSEARCH_HOST", "elasticsearch")
+    es_port = os.getenv("ELASTICSEARCH_PORT", "9200")
+    app.state.es_client = AsyncElasticsearch([f"http://{es_host}:{es_port}"])
+
     yield
-    
+
     # Shutdown: Close channels
-    logger.info("Closing gRPC channels...")
+    logger.info("Closing gRPC channels and clients...")
+    await app.state.es_client.close()
     await app.state.order_channel.close()
     await app.state.inventory_channel.close()
     await app.state.stream_channel.close()
@@ -583,6 +590,49 @@ async def get_me(user: dict = Depends(verify_jwt), req_obj: Request = None):
     return {
         "user_id": req_obj.state.user_id,
         "username": req_obj.state.username
+    }
+
+@app.get("/orders/search", dependencies=[Depends(verify_jwt)])
+async def search_orders(q: str):
+    """
+    Search orders in Elasticsearch
+    """
+    try:
+        body = {
+            "query": {
+                "multi_match": {
+                    "query": q,
+                    "fields": ["order_id", "customer_id", "status", "message"]
+                }
+            }
+        }
+        resp = await app.state.es_client.search(index="order_analytics", body=body)
+        return {
+            "total": resp["hits"]["total"]["value"],
+            "orders": [hit["_source"] for hit in resp["hits"]["hits"]]
+        }
+    except Exception as e:
+        logger.error(f"Elasticsearch search failed: {e}")
+        # If index doesn't exist yet, return empty
+        return {"total": 0, "orders": [], "error": str(e)}
+
+@app.get("/analytics/flow", dependencies=[Depends(verify_jwt)])
+async def get_analytics_flow():
+    """
+    Returns metadata about the streaming flow for visualization
+    """
+    return {
+        "nodes": [
+            {"id": "kafka", "type": "input", "data": {"label": "Kafka (order-events)"}, "position": {"x": 0, "y": 0}},
+            {"id": "flink", "type": "default", "data": {"label": "Flink (Analytics Pipeline)"}, "position": {"x": 250, "y": 0}},
+            {"id": "elasticsearch", "type": "output", "data": {"label": "Elasticsearch"}, "position": {"x": 500, "y": -50}},
+            {"id": "clickhouse", "type": "output", "data": {"label": "ClickHouse"}, "position": {"x": 500, "y": 50}}
+        ],
+        "edges": [
+            {"id": "e-kf", "source": "kafka", "target": "flink", "animated": True},
+            {"id": "e-fe", "source": "flink", "target": "elasticsearch", "label": "Sink"},
+            {"id": "e-fc", "source": "flink", "target": "clickhouse", "label": "Sink"}
+        ]
     }
 
 if __name__ == "__main__":
