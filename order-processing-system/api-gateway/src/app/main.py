@@ -623,15 +623,17 @@ async def get_analytics_flow():
     """
     return {
         "nodes": [
+            {"id": "api-gateway", "type": "input", "data": {"label": "API Gateway (Search)"}, "position": {"x": 250, "y": -150}},
             {"id": "kafka", "type": "input", "data": {"label": "Kafka (order-events)"}, "position": {"x": 0, "y": 0}},
             {"id": "flink", "type": "default", "data": {"label": "Flink (Analytics Pipeline)"}, "position": {"x": 250, "y": 0}},
             {"id": "elasticsearch", "type": "output", "data": {"label": "Elasticsearch"}, "position": {"x": 500, "y": -50}},
             {"id": "clickhouse", "type": "output", "data": {"label": "ClickHouse"}, "position": {"x": 500, "y": 50}}
         ],
         "edges": [
-            {"id": "e-kf", "source": "kafka", "target": "flink", "animated": True},
-            {"id": "e-fe", "source": "flink", "target": "elasticsearch", "label": "Sink"},
-            {"id": "e-fc", "source": "flink", "target": "clickhouse", "label": "Sink"}
+            {"id": "e-api-es", "source": "api-gateway", "target": "elasticsearch", "animated": True, "label": "Search Query"},
+            {"id": "e-kf", "source": "kafka", "target": "flink", "animated": True, "label": "Consume Events"},
+            {"id": "e-fe", "source": "flink", "target": "elasticsearch", "animated": True, "label": "Sink (Index)"},
+            {"id": "e-fc", "source": "flink", "target": "clickhouse", "animated": True, "label": "Sink (Analytics)"}
         ]
     }
 
