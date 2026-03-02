@@ -1,8 +1,8 @@
 # Build stage
-FROM python:3.10-slim-bullseye AS builder
+FROM python:3.12-slim-bookworm AS builder
 
-# Install uv for lightning fast builds
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# Pin uv version for reproducibility and security
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /bin/uv
 
 WORKDIR /app
 
@@ -30,9 +30,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install .
 
 # Final stage
-FROM python:3.10-slim-bullseye
+FROM python:3.12-slim-bookworm
 
 WORKDIR /app
+
+# Upgrade packages in final image to mitigate known vulnerabilities
+RUN apt-get update && apt-get upgrade -y && \
+    rm -rf /var/lib/apt/lists/*
 
 # Copy the virtualenv from the builder stage
 COPY --from=builder /opt/venv /opt/venv
@@ -42,7 +46,8 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY src/ ./src/
 
 # Security: Run as non-root user
-RUN useradd -m appuser && chown -R appuser:appuser /app
+RUN groupadd -r appgroup && useradd -r -g appgroup -m appuser && \
+    chown -R appuser:appgroup /app
 USER appuser
 
 # FastAPI port
@@ -51,3 +56,4 @@ EXPOSE 8001
 EXPOSE 50052
 
 CMD ["python", "src/app/main.py"]
+
