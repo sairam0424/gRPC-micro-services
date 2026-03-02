@@ -1,5 +1,4 @@
-# Base stage for dependencies
-FROM node:20.18.1-alpine3.20 AS deps
+FROM node:22-alpine3.21 AS deps
 WORKDIR /app
 
 # Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
@@ -9,7 +8,7 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 # Development stage
-FROM node:20.18.1-alpine3.20 AS development
+FROM node:22-alpine3.21 AS development
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -21,7 +20,7 @@ ENV HOSTNAME="0.0.0.0"
 CMD ["npm", "run", "dev"]
 
 # Build stage
-FROM node:20.18.1-alpine3.20 AS builder
+FROM node:22-alpine3.21 AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -30,7 +29,8 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 # Production runner stage
-FROM node:20.18.1-alpine3.20 AS runner
+FROM node:22-alpine3.21 AS runner
+
 WORKDIR /app
 
 # Upgrade packages in final image

@@ -12,28 +12,28 @@ RUN wget https://repo.maven.apache.org/maven2/org/apache/flink/flink-s3-fs-hadoo
     wget https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-connector-elasticsearch7/3.0.1-1.17/flink-sql-connector-elasticsearch7-3.0.1-1.17.jar
 
 # Final stage
-FROM flink:1.18.1-java11
+FROM flink:1.18.1-java17
 
 # Pin uv version
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /bin/uv
 
 # Install python3 and build dependencies
-# Upgrade system packages to mitigate vulnerabilities
+# Upgrade system packages and use Java 17 tools
 RUN apt-get update && apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-dev \
-    openjdk-11-jdk-headless \
+    openjdk-17-jdk-headless \
     gcc \
     g++ \
     build-essential \
     protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix JAVA_HOME for pemja/pyflink build
-RUN ln -s /usr/lib/jvm/java-11-openjdk-$(dpkg --print-architecture) /usr/lib/jvm/java-11-openjdk
-ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk"
+# Fix JAVA_HOME for Java 17
+RUN ln -s /usr/lib/jvm/java-17-openjdk-$(dpkg --print-architecture) /usr/lib/jvm/java-17-openjdk
+ENV JAVA_HOME="/usr/lib/jvm/java-17-openjdk"
 
 # Set python3 as default python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
