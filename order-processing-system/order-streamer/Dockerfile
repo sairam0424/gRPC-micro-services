@@ -2,7 +2,7 @@
 FROM golang:1.24-bookworm AS builder
 
 # Install build tools
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     build-essential \
     librdkafka-dev \
@@ -24,21 +24,26 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 # Final stage
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y \
+
+# Upgrade packages and install runtime dependencies
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
     librdkafka1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Security: Run as non-root user
-RUN useradd -m appuser
 WORKDIR /app
+
+# Security: Run as non-root user
+RUN groupadd -r appgroup && useradd -r -g appgroup -m appuser
 
 # Copy only the compiled binary
 COPY --from=builder /app/order-streamer .
-RUN chown appuser:appuser order-streamer
+RUN chown appuser:appgroup order-streamer
 
 USER appuser
 
 EXPOSE 50053
 
 CMD ["./order-streamer"]
+

@@ -1,5 +1,5 @@
 # Build stage for connectors
-FROM alpine:3.19 AS connector-builder
+FROM alpine:3.20 AS connector-builder
 
 RUN apk add --no-cache wget
 
@@ -14,11 +14,13 @@ RUN wget https://repo.maven.apache.org/maven2/org/apache/flink/flink-s3-fs-hadoo
 # Final stage
 FROM flink:1.18.1-java11
 
-# Install uv for lightning fast builds
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+# Pin uv version
+COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /bin/uv
 
 # Install python3 and build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Upgrade system packages to mitigate vulnerabilities
+RUN apt-get update && apt-get upgrade -y && \
+    apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-dev \
@@ -29,9 +31,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     protobuf-compiler \
     && rm -rf /var/lib/apt/lists/*
 
-# Fix JAVA_HOME for pemja/pyflink build (works for both amd64 and arm64)
+# Fix JAVA_HOME for pemja/pyflink build
 RUN ln -s /usr/lib/jvm/java-11-openjdk-$(dpkg --print-architecture) /usr/lib/jvm/java-11-openjdk
-ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk
+ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk"
 
 # Set python3 as default python
 RUN ln -sf /usr/bin/python3 /usr/bin/python
@@ -45,9 +47,17 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 COPY requirements.txt .
-RUN uv pip install -r requirements.txt
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv pip install -r requirements.txt
 
 COPY src/ /app/src/
 
+# Ensure flink user owns the app directory
+RUN chown -R flink:flink /app
+
+# Run as the default flink user
+USER flink
+
 # Command to run the Flink job
 CMD ["python", "src/main.py"]
+
