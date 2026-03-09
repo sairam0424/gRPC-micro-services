@@ -414,6 +414,16 @@ order-processing-system/
 ```
 
 ## Docs
+- `AGENTS.md` (primary contributor/agent operating contract)
+- `ARCHITECTURE.md` (primary architecture blueprint)
+- `docs/PLANS.md` (execution planning workflow and standards)
+- `docs/product-specs/index.md` (product intent and acceptance criteria)
+- `docs/exec-plans/index.md` (active/completed implementation plans)
+- `docs/QUALITY_SCORE.md` (release quality scorecard)
+- `docs/RELIABILITY.md` (reliability objectives and checks)
+- `docs/SECURITY.md` (security baseline and change checklist)
+
+Existing deep technical references:
 - `docs/architecture.md`
 - `docs/architecture_diagram.md`
 - `docs/setup.md`

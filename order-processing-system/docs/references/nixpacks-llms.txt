@@ -1,1 +1,26 @@
-DRAFT: nixpacks reference for agent use.
+Nixpacks Reference for LLM Agents
+
+Context
+- This repository currently favors Docker-based local/runtime workflows (`docker-compose*.yml`).
+- Nixpacks is not the primary build/deploy path today.
+
+When to Use Nixpacks
+- Only for deployment targets that explicitly require Nixpacks buildpacks.
+- Never replace working Docker local workflows without migration plan.
+
+Decision Rules
+1. Preserve current developer experience first.
+2. Validate parity with Docker behavior before recommending Nixpacks adoption.
+3. Document all runtime/environment assumptions if introducing Nixpacks.
+
+Minimum Checklist Before Any Nixpacks Adoption
+- Service entrypoint parity verified.
+- Environment variable mapping verified.
+- Build-time dependency installation verified.
+- Healthcheck behavior preserved.
+- Observability endpoints unaffected.
+
+Current Canonical Runtime References
+- `docker-compose-data.yml`
+- `docker-compose-control.yml`
+- `Makefile`
