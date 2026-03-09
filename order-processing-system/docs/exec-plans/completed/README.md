@@ -1,6 +1,11 @@
 # Completed Plans
 
-Move completed execution plans here after validation and closure.
+Move finished plans here once implementation and validation are complete.
 
-Naming convention:
+## Naming Convention
 `YYYY-MM-DD-short-title.md`
+
+## Completion Rules
+- Include validation evidence.
+- Link merged change(s).
+- Record deferred work in tech debt tracker if needed.
