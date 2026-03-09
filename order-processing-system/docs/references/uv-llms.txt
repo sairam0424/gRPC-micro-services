@@ -1,0 +1,28 @@
+uv Reference for LLM Agents
+
+Scope
+- Python service dependency and environment workflows in this repository.
+- Most relevant for `api-gateway/` (contains `uv.lock`) and compatible service setups.
+
+Guidelines
+1. Environment Management
+- Prefer isolated virtual environments per service.
+- Keep lockfiles and declared dependencies synchronized.
+
+2. Dependency Changes
+- Update dependency declaration and lock artifacts together.
+- Avoid ad hoc global installs for reproducibility-critical tasks.
+
+3. Service Alignment
+- Ensure commands in docs match actual service tooling (`uv`, `pip`, or project-specific setup).
+- Do not claim uv-based workflow for services that are not configured for it.
+
+4. Reliability
+- Keep dependency updates scoped; avoid unrelated bulk upgrades.
+- Document operational impact for security or runtime-sensitive dependency changes.
+
+Repository References
+- `api-gateway/pyproject.toml`
+- `api-gateway/uv.lock`
+- `docs/setup.md`
+- `README.md`

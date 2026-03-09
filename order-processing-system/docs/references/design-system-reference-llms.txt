@@ -1,0 +1,36 @@
+Design System Reference for LLM Agents
+
+Scope
+- Applies to `web-client/` and frontend-facing changes.
+- Primary objective: maintain consistent, accessible, and resilient UI for operational workflows.
+
+Current System Cues
+- Next.js app router with componentized UI in `src/components`.
+- Existing usage of shadcn-style primitives and custom dashboard components.
+- Data-rich operational views (orders, inventory, live stream) require clarity over ornament.
+
+Guidelines
+1. Consistency
+- Reuse existing component primitives before adding new ones.
+- Keep spacing, typography, and status-color semantics uniform.
+
+2. Operational Clarity
+- Prioritize readable status transitions (pending/processing/completed/failed).
+- Render loading, empty, and error states explicitly.
+
+3. Accessibility
+- Maintain keyboard operability and focus visibility.
+- Ensure sufficient color contrast for state badges and alerts.
+
+4. State Handling
+- Treat SSE updates as eventual and potentially bursty.
+- Avoid UI duplication on reconnect; use stable keys and dedupe logic.
+
+5. Safety
+- Do not surface internal identifiers or sensitive values unnecessarily.
+- Keep user-facing errors actionable without leaking internals.
+
+Frontend References
+- `docs/FRONTEND.md`
+- `docs/product-specs/new-user-onboarding.md`
+- `docs/frontend_integration.md`
