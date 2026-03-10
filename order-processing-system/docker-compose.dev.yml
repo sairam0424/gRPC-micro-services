@@ -17,6 +17,9 @@ services:
       - DATABASE_URL=${ORDER_DATABASE_URL}
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - SCHEMA_REGISTRY_URL=http://schema-registry:8081
+      - SAGA_ORCHESTRATOR_ADDR=saga-orchestrator:50054
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
     command: sh -c "air -c .air.toml"
     networks:
       - grpc-net
@@ -184,6 +187,8 @@ services:
       - OTEL_SERVICE_NAME=inventory-service
       - OTEL_RESOURCE_ATTRIBUTES=service.name=inventory-service,service.version=1.0.0
       - PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
     # Use uvicorn with reload for the FastAPI part, gRPC will restart when uvicorn reloads the module
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
@@ -633,11 +638,79 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - SAGA_RUNTIME_MODE=api
+      - SAGA_ROUTE_ORDER_FULFILLMENT=${SAGA_ROUTE_ORDER_FULFILLMENT:-legacy}
+      - SAGA_CANARY_PERCENT=${SAGA_CANARY_PERCENT:-0}
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE_ORDER=saga.order.fulfillment
     depends_on:
       kafka:
         condition: service_healthy
       redis:
         condition: service_healthy
+      temporal:
+        condition: service_started
+    networks:
+      - grpc-net
+
+  temporal-worker:
+    build:
+      context: .
+      dockerfile: saga-orchestrator/Dockerfile
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - SAGA_RUNTIME_MODE=worker
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE_ORDER=saga.order.fulfillment
+    depends_on:
+      kafka:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+    networks:
+      - grpc-net
+
+  temporal-postgresql:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_DB=temporal
+    networks:
+      - grpc-net
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    depends_on:
+      - temporal-postgresql
+    ports:
+      - "7233:7233"
+    networks:
+      - grpc-net
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_UI_PORT=8080
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:8233
+    depends_on:
+      - temporal
+    ports:
+      - "8233:8080"
     networks:
       - grpc-net
 

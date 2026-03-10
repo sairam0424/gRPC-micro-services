@@ -1,4 +1,4 @@
-.PHONY: generate clean build-python build-go up down up-dev tidy test jaeger prometheus grafana loki kafka-ui cdc-setup restart logs seed status help
+.PHONY: generate clean build-python build-go up down up-dev tidy test jaeger prometheus grafana loki kafka-ui cdc-setup restart logs seed status temporal-up temporal-down temporal-ui temporal-logs help
 
 PROTOC_GEN_GO := $(shell which protoc-gen-go)
 PROTOC_GEN_GO_GRPC := $(shell which protoc-gen-go-grpc)
@@ -118,6 +118,18 @@ seed:
 
 status:
 	docker compose -f docker-compose-data.yml -f docker-compose-control.yml ps
+
+temporal-up:
+	docker compose -f docker-compose-control.yml up -d temporal-postgresql temporal temporal-ui temporal-worker
+
+temporal-down:
+	docker compose -f docker-compose-control.yml stop temporal-worker temporal-ui temporal temporal-postgresql
+
+temporal-ui:
+	open http://localhost:8233
+
+temporal-logs:
+	docker compose -f docker-compose-control.yml logs -f temporal temporal-ui temporal-worker saga-orchestrator
 
 
 # Observability UIs (MacOS specific open command)
@@ -255,6 +267,7 @@ help:
 	@echo "  grafana      - Open Grafana UI (Dashboards & Loki Logs)"
 	@echo "  loki         - Alias for Grafana (viewing logs)"
 	@echo "  kafka-ui     - Open Kafka UI (Topics & Messages)"
+	@echo "  temporal-ui  - Open Temporal UI"
 	@echo "  redis-insight - Open RedisInsight Dashboard"
 	@echo "  redis-commander - Open Redis Commander UI"
 	@echo "  envoy-admin   - Open Envoy Admin UI (Metrics & Cluster stats)"
@@ -272,10 +285,13 @@ help:
 	@echo "  clickhouse-logs- Follow ClickHouse logs"
 	@echo "  es-logs        - Follow Elasticsearch logs"
 	@echo "  cdc-logs       - Follow Debezium Connect logs"
+	@echo "  temporal-logs  - Follow Temporal server/UI/worker logs"
 	@echo ""
 	@echo "  Analytics Lifecycle:"
 	@echo "  analytics-up   - Start analytics stack"
 	@echo "  analytics-down - Stop analytics stack"
+	@echo "  temporal-up    - Start Temporal server/UI/worker stack"
+	@echo "  temporal-down  - Stop Temporal server/UI/worker stack"
 	@echo ""
 	@echo "  kafka-dlq-topics - Create DLQ Kafka topics"
 	@echo "  replay-inventory      - Replay inventory DLQ events"
