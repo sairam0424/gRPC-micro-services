@@ -66,6 +66,11 @@ Provides a web interface to monitor Kafka topics, messages, and consumer groups.
 - **UI**: `http://localhost:8080`
 - **Shortcut**: `make kafka-ui`
 
+### Workflow Visibility (Temporal UI)
+Provides workflow-level history, retries, and compensation execution visibility for Temporal-routed sagas.
+- **UI**: `http://localhost:8233`
+- **Shortcut**: `make temporal-ui`
+
 ### Dashboards (Grafana)
 The unified visualization layer for traces, metrics, and logs.
 - **UI**: `http://localhost:3000`

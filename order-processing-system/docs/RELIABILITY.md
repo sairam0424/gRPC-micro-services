@@ -11,6 +11,7 @@ This document defines reliability expectations and runbook-level controls.
 - Outbox pattern for transactional event publication.
 - Multi-layer idempotency (gateway, consumers, saga).
 - DLQ + replay for failed event recovery.
+- Temporal durable workflow execution for migrated sagas.
 - Rate limiting and load shedding at gateway.
 - Edge resilience via Envoy controls.
 

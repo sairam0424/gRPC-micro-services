@@ -23,7 +23,8 @@ Primary capabilities:
 - Order Service (Go): writes orders, outbox events, reacts to inventory/media events.
 - Inventory Service (Python): stock reservation/release, cache and filter layers, Kafka event handling.
 - Order Streamer (Go): consumes order events and serves gRPC streaming updates.
-- Saga Orchestrator (Go): manages saga state and cross-service command flow.
+- Saga Orchestrator (Go): manages saga state and cross-service command flow; supports legacy and Temporal-backed routing.
+- Temporal Worker (Go): executes Temporal workflows/activities for migrated sagas.
 - Auth Service (Python): user identity and JWT flow.
 - Media Service (Python): media metadata and event propagation.
 
@@ -88,6 +89,7 @@ Saga control flow:
 - Saga Orchestrator emits commands (reserve/complete/release/fail).
 - Services handle commands idempotently and publish saga events.
 - Orchestrator advances/compensates based on event status.
+- Temporal-routed sagas execute in durable workflows while preserving the same command/event side effects.
 
 ## 6. Idempotency Model
 Idempotency is enforced at multiple layers:

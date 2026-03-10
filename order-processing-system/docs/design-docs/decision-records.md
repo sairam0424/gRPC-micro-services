@@ -17,6 +17,7 @@ Use this file as an index for architecture and process decisions.
 | ADR-002 | Use protobuf contracts + schema registry for event interface governance | Accepted | `proto/`, `docs/event_versioning.md` |
 | ADR-003 | Enforce multi-layer idempotency and DLQ replay for reliability | Accepted | service code + `docs/resilience.md` |
 | ADR-004 | Treat AGENTS/ARCHITECTURE/PLANS as canonical contributor entrypoints | Accepted | docs harness implementation |
+| ADR-TEMP-* | Temporal migration decisions for saga orchestration | Accepted | `docs/decision-log-temporal-migration.md` |
 
 ## Next Step
 Create dedicated ADR files if decision volume grows; keep this index as root navigator.
