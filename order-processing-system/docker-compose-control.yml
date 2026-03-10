@@ -11,8 +11,17 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${REDIS_PASSWORD}
+      - SAGA_RUNTIME_MODE=api
+      - SAGA_ROUTE_ORDER_FULFILLMENT=${SAGA_ROUTE_ORDER_FULFILLMENT:-legacy}
+      - SAGA_CANARY_PERCENT=${SAGA_CANARY_PERCENT:-0}
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE_ORDER=saga.order.fulfillment
     depends_on:
       - kafka
+      - temporal
     deploy:
       resources:
         limits:
@@ -24,6 +33,86 @@ services:
     networks:
       - internal-control-network
       - public-data-network # Needs to talk to Kafka/Redis in Data Plane
+
+  temporal-worker:
+    build:
+      context: .
+      dockerfile: saga-orchestrator/Dockerfile
+    environment:
+      - KAFKA_BROKERS=kafka:29092
+      - SAGA_RUNTIME_MODE=worker
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=default
+      - TEMPORAL_TASK_QUEUE_ORDER=saga.order.fulfillment
+    depends_on:
+      - kafka
+      - temporal
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - internal-control-network
+      - public-data-network
+
+  temporal-postgresql:
+    image: postgres:15
+    environment:
+      - POSTGRES_USER=temporal
+      - POSTGRES_PASSWORD=temporal
+      - POSTGRES_DB=temporal
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+    networks:
+      - internal-control-network
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+    depends_on:
+      - temporal-postgresql
+    ports:
+      - "7233:7233"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 1G
+    networks:
+      - internal-control-network
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_UI_PORT=8080
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:8233
+    depends_on:
+      - temporal
+    ports:
+      - "8233:8080"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+    networks:
+      - internal-control-network
 
   schema-registry:
     image: confluentinc/cp-schema-registry:7.4.0

@@ -26,14 +26,14 @@ import (
 	sagav1 "github.com/sairam0424/gRPC-micro-services/saga-orchestrator/pkg/generated/saga/v1"
 	"gorm.io/gorm"
 
+	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/sairam0424/gRPC-micro-services/order-service/internal/saga"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
-	ckafka "github.com/confluentinc/confluent-kafka-go/v2/kafka"
-	"github.com/sairam0424/gRPC-micro-services/order-service/internal/saga"
 	"gorm.io/gorm/clause"
 )
 
@@ -67,7 +67,7 @@ type server struct {
 	orderv1.UnimplementedOrderServiceServer
 	inventoryClient *inventory.Client
 	kafkaProducer   *kafka.Producer
-	sagaClient     sagav1.SagaServiceClient
+	sagaClient      sagav1.SagaServiceClient
 }
 
 func (s *server) CreateOrder(ctx context.Context, req *orderv1.CreateOrderRequest) (*orderv1.CreateOrderResponse, error) {
@@ -254,6 +254,14 @@ func main() {
 	if kafkaBrokers == "" {
 		kafkaBrokers = "kafka:29092"
 	}
+	sagaCommandTopic := os.Getenv("SAGA_COMMAND_TOPIC")
+	if sagaCommandTopic == "" {
+		sagaCommandTopic = "saga-commands"
+	}
+	sagaEventTopic := os.Getenv("SAGA_EVENT_TOPIC")
+	if sagaEventTopic == "" {
+		sagaEventTopic = "saga-events"
+	}
 
 	schemaRegistryURL := os.Getenv("SCHEMA_REGISTRY_URL")
 	if schemaRegistryURL == "" {
@@ -293,7 +301,6 @@ func main() {
 	defer sagaConn.Close()
 	sagaClient := sagav1.NewSagaServiceClient(sagaConn)
 
-
 	lis, err := net.Listen("tcp", ":50051")
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -309,7 +316,7 @@ func main() {
 	}
 
 	orderv1.RegisterOrderServiceServer(s, srv)
-	
+
 	// Create cancellable context for background workers
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -328,8 +335,8 @@ func main() {
 		log.Fatalf("Failed to create Kafka consumer: %v", err)
 	}
 
-	if err = c.SubscribeTopics([]string{"saga-commands"}, nil); err != nil {
-		log.Fatalf("Failed to subscribe to saga-commands: %v", err)
+	if err = c.SubscribeTopics([]string{sagaCommandTopic}, nil); err != nil {
+		log.Fatalf("Failed to subscribe to %s: %v", sagaCommandTopic, err)
 	}
 
 	// We need a producer to send results back to saga-events
@@ -354,7 +361,7 @@ func main() {
 
 				switch e := ev.(type) {
 				case *ckafka.Message:
-					saga.HandleSagaCommand(p, e)
+					saga.HandleSagaCommand(p, e, sagaEventTopic)
 				case ckafka.Error:
 					log.Printf("Kafka error: %v", e)
 				}
@@ -378,13 +385,13 @@ func main() {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			
+
 			dbStatus := "connected"
 			db, err := database.DB.DB()
 			if err != nil || db.Ping() != nil {
 				dbStatus = "disconnected"
 			}
-			
+
 			// For this demo, we assume kafka is connected if the producer is initialized
 			// In Go, better check would be writer.Stats() or Dial
 			kafkaStatus := "connected"
@@ -425,7 +432,7 @@ func startOutboxRelay(ctx context.Context, db *gorm.DB, producer *kafka.Producer
 			return
 		case <-ticker.C:
 			var messages []models.Outbox
-			
+
 			// Use Transaction for atomic fetch and mark
 			err := db.Transaction(func(tx *gorm.DB) error {
 				// 1. Fetch and Lock messages (SKIP LOCKED prevents multiple instances from picking same messages)

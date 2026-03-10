@@ -18,6 +18,9 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=otel-collector:4317
       - SCHEMA_REGISTRY_URL=http://schema-registry:8081
       - KAFKA_TOPIC_ORDER_EVENTS=data.order-events
+      - SAGA_ORCHESTRATOR_ADDR=saga-orchestrator:50054
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
     command: sh -c "air -c .air.toml"
     deploy:
       resources:
@@ -172,6 +175,8 @@ services:
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - OTEL_SERVICE_NAME=inventory-service
       - PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python
+      - SAGA_COMMAND_TOPIC=${SAGA_COMMAND_TOPIC:-saga-commands}
+      - SAGA_EVENT_TOPIC=${SAGA_EVENT_TOPIC:-saga-events}
     command: uvicorn src.app.main:app --host 0.0.0.0 --port 8001 --reload
     healthcheck:
       test: ["CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8001/health\")' || exit 1"]

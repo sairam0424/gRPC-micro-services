@@ -32,16 +32,26 @@ type SagaInstance struct {
 }
 
 type SagaEngine struct {
-	redisClient *redis.Client
-	producer    *kafka.Producer
-	consumer    *kafka.Consumer
+	redisClient  *redis.Client
+	producer     *kafka.Producer
+	consumer     *kafka.Consumer
+	commandTopic string
+	eventTopic   string
 }
 
-func NewSagaEngine(redisClient *redis.Client, producer *kafka.Producer, consumer *kafka.Consumer) *SagaEngine {
+func NewSagaEngine(redisClient *redis.Client, producer *kafka.Producer, consumer *kafka.Consumer, commandTopic string, eventTopic string) *SagaEngine {
+	if commandTopic == "" {
+		commandTopic = "saga-commands"
+	}
+	if eventTopic == "" {
+		eventTopic = "saga-events"
+	}
 	return &SagaEngine{
-		redisClient: redisClient,
-		producer:    producer,
-		consumer:    consumer,
+		redisClient:  redisClient,
+		producer:     producer,
+		consumer:     consumer,
+		commandTopic: commandTopic,
+		eventTopic:   eventTopic,
 	}
 }
 
@@ -84,8 +94,8 @@ func (e *SagaEngine) StartOrderSaga(ctx context.Context, orderID string, items i
 }
 
 func (e *SagaEngine) Start(ctx context.Context) {
-	if err := e.consumer.SubscribeTopics([]string{"saga-events"}, nil); err != nil {
-		log.Fatalf("Failed to subscribe to saga-events: %v", err)
+	if err := e.consumer.SubscribeTopics([]string{e.eventTopic}, nil); err != nil {
+		log.Fatalf("Failed to subscribe to %s: %v", e.eventTopic, err)
 	}
 
 	log.Println("Saga Engine: Started event processor")
@@ -253,7 +263,7 @@ func (e *SagaEngine) saveSaga(ctx context.Context, instance *SagaInstance) error
 }
 
 func (e *SagaEngine) publishCommand(instance *SagaInstance, command string) error {
-	topic := "saga-commands"
+	topic := e.commandTopic
 	payload := map[string]interface{}{
 		"sagaId":  instance.ID,
 		"orderId": instance.OrderID,
