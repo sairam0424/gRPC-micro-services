@@ -184,10 +184,12 @@ async def lifespan(app: FastAPI):
 
     # Start Saga Manager for Kafka orchestration
     from .saga_manager import SagaManager
+    saga_command_topic = os.getenv("SAGA_COMMAND_TOPIC", "saga-commands")
+    saga_event_topic = os.getenv("SAGA_EVENT_TOPIC", "saga-events")
     app.state.saga = SagaManager(
         kafka_brokers,
-        "ctrl.saga-commands",
-        "ctrl.saga-events"
+        saga_command_topic,
+        saga_event_topic
     )
     saga_thread = threading.Thread(target=app.state.saga.start, daemon=True)
     saga_thread.start()

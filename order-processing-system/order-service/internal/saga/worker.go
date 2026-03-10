@@ -12,7 +12,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func HandleSagaCommand(p *ckafka.Producer, msg *ckafka.Message) {
+func HandleSagaCommand(p *ckafka.Producer, msg *ckafka.Message, eventTopic string) {
 	var command map[string]interface{}
 	if err := json.Unmarshal(msg.Value, &command); err != nil {
 		log.Printf("Failed to unmarshal saga command: %v", err)
@@ -74,7 +74,7 @@ func HandleSagaCommand(p *ckafka.Producer, msg *ckafka.Message) {
 	}
 
 	// Publish Event back
-	publishSagaEvent(p, sagaID, orderID, cmdType, result, err)
+	publishSagaEvent(p, eventTopic, sagaID, orderID, cmdType, result, err)
 }
 
 func CompleteOrder(tx *gorm.DB, orderID string) (map[string]interface{}, error) {
@@ -99,19 +99,21 @@ func FailOrder(tx *gorm.DB, orderID string, reason string) (map[string]interface
 	return map[string]interface{}{"status": "FAILED", "reason": reason}, nil
 }
 
-func publishSagaEvent(p *ckafka.Producer, sagaID, orderID, command string, result map[string]interface{}, err error) {
-	topic := "saga-events"
+func publishSagaEvent(p *ckafka.Producer, topic string, sagaID, orderID, command string, result map[string]interface{}, err error) {
+	if topic == "" {
+		topic = "saga-events"
+	}
 	status := "SUCCESS"
 	if err != nil {
 		status = "FAILURE"
 	}
 
 	payload := map[string]interface{}{
-		"sagaId":  sagaID,
-		"orderId": orderID,
-		"command": command,
-		"status":  status,
-		"data":    result,
+		"sagaId":    sagaID,
+		"orderId":   orderID,
+		"command":   command,
+		"status":    status,
+		"data":      result,
 		"timestamp": time.Now().UnixMilli(),
 	}
 	if err != nil {
