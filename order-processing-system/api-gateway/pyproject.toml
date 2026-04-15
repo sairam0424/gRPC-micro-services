@@ -12,7 +12,7 @@ dependencies = [
     "pydantic",
     "python-jose[cryptography]",
     "python-dotenv",
-    "python-multipart>=0.0.7",
+    "python-multipart>=0.0.26",
     "opentelemetry-api",
     "opentelemetry-sdk",
     "opentelemetry-exporter-otlp",
