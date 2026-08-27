@@ -4,7 +4,7 @@ go 1.24.3
 
 require (
 	github.com/confluentinc/confluent-kafka-go/v2 v2.13.0
-	github.com/redis/go-redis/v9 v9.18.0
+	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.10.0
 	go.temporal.io/api v1.62.2
 	go.temporal.io/sdk v1.41.0
@@ -15,7 +15,6 @@ require (
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/facebookgo/clock v0.0.0-20150410010913-600d898af40a // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
