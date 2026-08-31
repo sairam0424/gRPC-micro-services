@@ -28,6 +28,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install flake8 pytest
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        # inventory-service is the only service in this monorepo with an
+        # automated test runnable by this generic repo-wide pytest step
+        # (tests/test_caching_unit.py). Install its package so that test can
+        # actually import app.main and its dependencies (fastapi, grpc,
+        # sqlalchemy, etcd3, redis, etc.) instead of failing collection.
+        pip install -e order-processing-system/inventory-service
     - name: Lint with flake8
       run: |
         # stop the build if there are Python syntax errors or undefined names
@@ -46,19 +52,16 @@ jobs:
         #   - inventory-service/tests/test_caching.py: a manual gRPC smoke
         #     script (no test_ functions) against a live service on
         #     localhost:50052.
-        #   - inventory-service/tests/test_caching_unit.py: a real unit test,
-        #     but importing it currently hits a pre-existing, unrelated
-        #     etcd3/protobuf version conflict in the service's consensus
-        #     module (TypeError: Descriptors cannot be created directly).
-        #     Tracked separately; out of scope for this generic lint/test
-        #     workflow to resolve.
+        # inventory-service/tests/test_caching_unit.py is a real automated
+        # unit test and now runs here: its etcd3/protobuf import conflict is
+        # fixed (see tests/conftest.py) and its dependencies are installed
+        # above.
         # Any other collection error or test failure still fails the build.
         set +e
         pytest \
           --ignore=order-processing-system/test_sse.py \
           --ignore=order-processing-system/inventory-service/test_db_debug.py \
-          --ignore=order-processing-system/inventory-service/tests/test_caching.py \
-          --ignore=order-processing-system/inventory-service/tests/test_caching_unit.py
+          --ignore=order-processing-system/inventory-service/tests/test_caching.py
         status=$?
         set -e
         if [ $status -eq 5 ]; then

@@ -67,7 +67,7 @@ class TestCaching(unittest.IsolatedAsyncioTestCase):
         mock_cache.get_stock.return_value = 5 # only 5 in cache
         
         # Request 10
-        item = inventory_pb2.ReserveItem(product_id="PROD-001", quantity=10)
+        item = inventory_pb2.InventoryItem(product_id="PROD-001", quantity=10)
         request = inventory_pb2.ReserveStockRequest(order_id="ORD-1", items=[item])
         
         response = await self.servicer.ReserveStock(request, None)
