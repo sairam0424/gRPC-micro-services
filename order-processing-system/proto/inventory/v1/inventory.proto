@@ -6,7 +6,10 @@ option go_package = "github.com/sairam0424/gRPC-micro-services/order-service/pkg
 
 // InventoryService manages product stock levels.
 service InventoryService {
-  // CheckStock returns the current quantity of an item.
+  // CheckStock returns the current quantity of an item. It is served from
+  // a cache when possible (single-flight protected against cache
+  // stampedes on a miss) and falls back to the database, repopulating the
+  // cache, otherwise. Returns a quantity of 0 if the item does not exist.
   rpc CheckStock(CheckStockRequest) returns (CheckStockResponse);
 
   // ReserveStock attempts to lock items for an order.
