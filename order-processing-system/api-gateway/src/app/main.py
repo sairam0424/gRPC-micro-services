@@ -9,6 +9,7 @@ import grpc
 import os
 import sys
 import logging
+import time
 from opentelemetry import trace, metrics, _logs
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
