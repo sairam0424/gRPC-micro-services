@@ -24,7 +24,7 @@ class TestCaching(unittest.IsolatedAsyncioTestCase):
 
     @patch('app.main.cache_manager')
     @patch('app.main.crud.get_inventory_item', new_callable=AsyncMock)
-    @patch('app.main.async_session')
+    @patch('app.main.writer_session')
     async def test_check_stock_cache_hit(self, mock_session, mock_get_item, mock_cache):
         # Setup: Cache hit
         mock_cache.get_stock.return_value = 10
@@ -38,7 +38,7 @@ class TestCaching(unittest.IsolatedAsyncioTestCase):
 
     @patch('app.main.cache_manager')
     @patch('app.main.crud.get_inventory_item', new_callable=AsyncMock)
-    @patch('app.main.async_session')
+    @patch('app.main.writer_session')
     async def test_check_stock_cache_miss(self, mock_session, mock_get_item, mock_cache):
         # Setup: Cache miss
         mock_cache.get_stock.side_effect = [None, None] # First miss, second re-check also miss
@@ -60,7 +60,7 @@ class TestCaching(unittest.IsolatedAsyncioTestCase):
     @patch('app.main.cache_manager')
     @patch('app.main.filter_manager')
     @patch('app.main.crud.reserve_stock_atomic', new_callable=AsyncMock)
-    @patch('app.main.async_session')
+    @patch('app.main.writer_session')
     async def test_reserve_stock_cache_reject(self, mock_session, mock_reserve, mock_filter, mock_cache):
         # Setup: Bloom filter pass, but cache rejects
         mock_filter.is_in_stock.return_value = True
