@@ -10,8 +10,53 @@ updates:
     schedule:
       interval: "weekly"
 
+  - package-ecosystem: "gomod"
+    directory: "/order-processing-system/order-streamer"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "gomod"
+    directory: "/order-processing-system/saga-orchestrator"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "gomod"
+    directory: "/order-processing-system/infra/replay-service"
+    schedule:
+      interval: "weekly"
+
   - package-ecosystem: "pip"
     directory: "/order-processing-system/analytics-pipeline"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/order-processing-system/media-service"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/order-processing-system/infra/dlq-ui"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/order-processing-system/api-gateway"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/order-processing-system/auth-service"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directory: "/order-processing-system/inventory-service"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "npm"
+    directory: "/order-processing-system/web-client"
     schedule:
       interval: "weekly"
 

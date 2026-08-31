@@ -1,6 +1,7 @@
 import json
 import logging
 import struct
+import time
 import requests
 from typing import Optional
 from confluent_kafka import Consumer, Producer, KafkaError
