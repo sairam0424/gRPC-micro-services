@@ -32,7 +32,10 @@ const (
 //
 // InventoryService manages product stock levels.
 type InventoryServiceClient interface {
-	// CheckStock returns the current quantity of an item.
+	// CheckStock returns the current quantity of an item. It is served from
+	// a cache when possible (single-flight protected against cache
+	// stampedes on a miss) and falls back to the database, repopulating the
+	// cache, otherwise. Returns a quantity of 0 if the item does not exist.
 	CheckStock(ctx context.Context, in *CheckStockRequest, opts ...grpc.CallOption) (*CheckStockResponse, error)
 	// ReserveStock attempts to lock items for an order.
 	// This is a single atomic operation for multiple items.
@@ -109,7 +112,10 @@ func (c *inventoryServiceClient) ListInventory(ctx context.Context, in *ListInve
 //
 // InventoryService manages product stock levels.
 type InventoryServiceServer interface {
-	// CheckStock returns the current quantity of an item.
+	// CheckStock returns the current quantity of an item. It is served from
+	// a cache when possible (single-flight protected against cache
+	// stampedes on a miss) and falls back to the database, repopulating the
+	// cache, otherwise. Returns a quantity of 0 if the item does not exist.
 	CheckStock(context.Context, *CheckStockRequest) (*CheckStockResponse, error)
 	// ReserveStock attempts to lock items for an order.
 	// This is a single atomic operation for multiple items.

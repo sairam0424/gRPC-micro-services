@@ -67,7 +67,10 @@ class InventoryServiceServicer(object):
     """
 
     def CheckStock(self, request, context):
-        """CheckStock returns the current quantity of an item.
+        """CheckStock returns the current quantity of an item. It is served from
+        a cache when possible (single-flight protected against cache
+        stampedes on a miss) and falls back to the database, repopulating the
+        cache, otherwise. Returns a quantity of 0 if the item does not exist.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
