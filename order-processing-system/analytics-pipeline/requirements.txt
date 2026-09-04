@@ -4,7 +4,7 @@ elasticsearch==8.12.1
 clickhouse-connect==0.7.0
 duckdb==0.10.0
 feast==0.54.0
-pandas>=1.4.3,<2.0.0
+pandas>=3.0.5,<4.0.0
 python-dotenv==1.2.2
 setuptools>=83.0.0
 protobuf>=3.20,<7.34.1
