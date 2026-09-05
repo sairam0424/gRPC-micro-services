@@ -3,7 +3,7 @@ module github.com/sairam0424/gRPC-micro-services/saga-orchestrator
 go 1.25.4
 
 require (
-	github.com/confluentinc/confluent-kafka-go/v2 v2.13.0
+	github.com/confluentinc/confluent-kafka-go/v2 v2.15.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.12.1
 	go.temporal.io/api v1.63.4
@@ -26,11 +26,11 @@ require (
 	github.com/stretchr/objx v0.5.3 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.5 // indirect
-	golang.org/x/net v0.55.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	golang.org/x/time v0.6.0 // indirect
+	golang.org/x/time v0.12.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 )
