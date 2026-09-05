@@ -6,7 +6,7 @@ require (
 	github.com/confluentinc/confluent-kafka-go/v2 v2.13.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.12.1
-	go.temporal.io/api v1.63.4
+	go.temporal.io/api v1.63.5
 	go.temporal.io/sdk v1.48.0
 	google.golang.org/grpc v1.83.1
 	google.golang.org/protobuf v1.36.12
