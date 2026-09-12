@@ -1,0 +1,50 @@
+language: en-US
+tone_instructions: "This is a polyglot order-processing reference system with a saga orchestrator. Prioritize correctness in distributed-transaction and event-flow logic over style."
+enable_free_tier: true
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  auto_review:
+    enabled: true
+    ignore_usernames: ["dependabot[bot]"]
+    auto_incremental_review: true
+  path_filters:
+    - "!**/*_pb2.py"
+    - "!**/*_pb2_grpc.py"
+    - "!**/*.pb.go"
+    - "!**/__pycache__/**"
+    - "!order-processing-system/web-client/dist/**"
+    - "!order-processing-system/docs/generated/**"
+  path_instructions:
+    - path: "order-processing-system/saga-orchestrator/**/*.go"
+      instructions: "Flag any saga step that lacks a compensating action, missing idempotency keys, or unhandled partial-failure states."
+    - path: "order-processing-system/order-service/**/*.go"
+      instructions: "Flag unchecked errors, missing context cancellation, and inconsistent order-state transitions."
+    - path: "order-processing-system/order-streamer/**/*.go"
+      instructions: "Flag consumer offset/ack handling issues and potential message-loss or duplicate-delivery paths."
+    - path: "order-processing-system/*-service/src/**/*.py"
+      instructions: >
+        Review each service as its own bounded context. Flag any direct
+        import between services (should communicate only via generated
+        gRPC stubs or events), missing timeout/deadline on outbound gRPC
+        calls, and unvalidated request payloads at service boundaries.
+    - path: "order-processing-system/proto/**/*.proto"
+      instructions: "Flag breaking changes to field numbers/types that would break wire compatibility with existing clients."
+    - path: "order-processing-system/web-client/src/**"
+      instructions: "Flag unhandled SSE/WebSocket disconnect states and missing loading/error UI states."
+  tools:
+    ruff:
+      enabled: true
+    golangci-lint:
+      enabled: true
+    eslint:
+      enabled: true
+    semgrep:
+      enabled: true
+    gitleaks:
+      enabled: true
+
+knowledge_base:
+  learnings:
+    scope: local
