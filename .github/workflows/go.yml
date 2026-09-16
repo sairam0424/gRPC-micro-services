@@ -26,6 +26,7 @@ jobs:
           - order-processing-system/order-service
           - order-processing-system/order-streamer
           - order-processing-system/saga-orchestrator
+          - order-processing-system/infra/replay-service
     steps:
     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 

@@ -1,0 +1,52 @@
+# Trivy filesystem + misconfiguration + secret scan. This repo has 12
+# Dockerfiles across every service and no image/config scanning of any
+# kind. A filesystem scan (rather than a per-service `docker build` +
+# image scan matrix) is used deliberately: it covers Dockerfile
+# misconfigurations and dependency-manifest vulnerabilities (go.sum,
+# requirements.txt, package-lock.json) across the whole monorepo in one
+# job, without needing 12 build contexts (Go/Python/Node, some requiring
+# build args) to succeed just to run a security scan. Building and
+# scanning each service's actual image is a reasonable follow-up once
+# every Dockerfile's build context is confirmed to build cleanly in CI.
+
+name: Trivy
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Weekly, to catch newly disclosed CVEs against unchanged dependency
+    # manifests.
+    - cron: '0 7 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  trivy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Run Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+          exit-code: 1
+
+      - name: Upload Trivy results to code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@faaca9a8f6edddba5725ffe5adefdab6669a2eca # v3.38.0
+        with:
+          sarif_file: trivy-results.sarif

@@ -1,0 +1,38 @@
+# Secret scanning as an independent CI gate on every push/PR, redundant with
+# (not a replacement for) native GitHub secret scanning. CodeRabbit's gitleaks
+# tool only comments on PRs reviewed by CodeRabbit's SaaS pass and is not a
+# CI gate, so this workflow exists to block merges on detected secrets.
+# No GITLEAKS_LICENSE is configured: gitleaks-action v2 only requires a
+# license for GitHub Organization accounts, and this repo is owned by a
+# personal account (sairam0424), so it runs license-free.
+# For more information see: https://github.com/gitleaks/gitleaks-action
+
+name: gitleaks
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # gitleaks-action comments on the PR when a secret is detected.
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Run gitleaks
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

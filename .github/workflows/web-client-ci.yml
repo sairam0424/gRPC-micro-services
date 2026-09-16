@@ -1,0 +1,48 @@
+# web-client (Next.js 16 / React 19 / TypeScript) has had zero CI coverage:
+# no build, no lint, no type-check, no test, despite an existing ESLint
+# config (eslint.config.mjs) and a Dependabot npm ecosystem entry. This
+# workflow wires the existing ESLint config, tsc --noEmit, npm audit, and a
+# production build into CI.
+
+name: Web client CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: order-processing-system/web-client
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: order-processing-system/web-client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint (ESLint)
+        run: npm run lint
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+      - name: npm audit
+        run: npm audit --audit-level=high

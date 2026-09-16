@@ -1,0 +1,18 @@
+# golangci-lint v2 configuration, shared across all Go modules in this
+# monorepo (order-service, order-streamer, saga-orchestrator,
+# infra/replay-service). CI (.github/workflows/golangci-lint.yml) points
+# each module at this file via --config=<repo-root>/.golangci.yml since each
+# module has its own go.mod and no config of its own.
+# Schema: https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+version: "2"
+
+linters:
+  default: standard
+  exclusions:
+    # protoc-generated *.pb.go files already carry the standard
+    # "// Code generated ... DO NOT EDIT." header.
+    generated: strict
+    # Belt-and-suspenders explicit match, consistent with the *.pb.go
+    # exclusion already used for CodeRabbit reviews (.coderabbit.yaml).
+    paths:
+      - '(.+)\.pb\.go$'
