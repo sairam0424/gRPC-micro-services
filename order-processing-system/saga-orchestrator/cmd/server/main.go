@@ -143,7 +143,7 @@ func startAPIServer(ctx context.Context, cfg appConfig, errCh chan<- error) (fun
 		"bootstrap.servers": cfg.KafkaBrokers,
 	})
 	if err != nil {
-		rdb.Close()
+		_ = rdb.Close()
 		return nil, fmt.Errorf("create legacy kafka producer: %w", err)
 	}
 
@@ -154,7 +154,7 @@ func startAPIServer(ctx context.Context, cfg appConfig, errCh chan<- error) (fun
 	})
 	if err != nil {
 		legacyProducer.Close()
-		rdb.Close()
+		_ = rdb.Close()
 		return nil, fmt.Errorf("create legacy kafka consumer: %w", err)
 	}
 
@@ -169,9 +169,9 @@ func startAPIServer(ctx context.Context, cfg appConfig, errCh chan<- error) (fun
 			Namespace: cfg.TemporalNamespace,
 		})
 		if err != nil {
-			legacyConsumer.Close()
+			_ = legacyConsumer.Close()
 			legacyProducer.Close()
-			rdb.Close()
+			_ = rdb.Close()
 			return nil, fmt.Errorf("dial temporal for API mode: %w", err)
 		}
 		temporalBackend = orchestration.NewTemporalAdapter(temporalClient, cfg.TemporalTaskQueue)
@@ -195,9 +195,9 @@ func startAPIServer(ctx context.Context, cfg appConfig, errCh chan<- error) (fun
 		if temporalClient != nil {
 			temporalClient.Close()
 		}
-		legacyConsumer.Close()
+		_ = legacyConsumer.Close()
 		legacyProducer.Close()
-		rdb.Close()
+		_ = rdb.Close()
 		return nil, fmt.Errorf("listen grpc: %w", err)
 	}
 
@@ -238,9 +238,9 @@ func startAPIServer(ctx context.Context, cfg appConfig, errCh chan<- error) (fun
 		if temporalClient != nil {
 			temporalClient.Close()
 		}
-		legacyConsumer.Close()
+		_ = legacyConsumer.Close()
 		legacyProducer.Close()
-		rdb.Close()
+		_ = rdb.Close()
 	}
 	return cleanup, nil
 }

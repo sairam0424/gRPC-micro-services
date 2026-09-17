@@ -177,30 +177,39 @@ func (e *SagaEngine) handleEvent(ctx context.Context, msg *kafka.Message) {
 	}
 }
 
+// logSagaErr logs a save/publish failure that handleNextStep and
+// handleFailure otherwise cannot surface: both are called fire-and-forget
+// from the event-processing loop with no caller left to propagate to.
+func (e *SagaEngine) logSagaErr(sagaID, op string, err error) {
+	if err != nil {
+		log.Printf("Saga Engine: CRITICAL: %s failed for Saga %s: %v", op, sagaID, err)
+	}
+}
+
 func (e *SagaEngine) handleNextStep(ctx context.Context, instance *SagaInstance, lastCmd string) {
 	switch lastCmd {
 	case "reserve_stock":
 		instance.CurrentStep = "COMPLETE_ORDER"
 		instance.Status = SagaStatusInProgress
-		e.saveSaga(ctx, instance)
-		e.publishCommand(instance, "complete_order")
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
+		e.logSagaErr(instance.ID, "publishCommand(complete_order)", e.publishCommand(instance, "complete_order"))
 
 	case "complete_order":
 		instance.Status = SagaStatusCompleted
 		instance.CurrentStep = "DONE"
-		e.saveSaga(ctx, instance)
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
 		log.Printf("Saga Engine: Saga %s COMPLETED successfully", instance.ID)
 
 	case "release_stock":
 		// Release stock was successful, now ensure order is failed
 		instance.CurrentStep = "FAIL_ORDER"
-		e.saveSaga(ctx, instance)
-		e.publishCommand(instance, "fail_order")
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
+		e.logSagaErr(instance.ID, "publishCommand(fail_order)", e.publishCommand(instance, "fail_order"))
 
 	case "fail_order":
 		instance.Status = SagaStatusFailed
 		instance.CurrentStep = "FAILED"
-		e.saveSaga(ctx, instance)
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
 		log.Printf("Saga Engine: Saga %s FAILED (Compensated)", instance.ID)
 	}
 }
@@ -213,29 +222,29 @@ func (e *SagaEngine) handleFailure(ctx context.Context, instance *SagaInstance, 
 		// Initial step failed, move directly to fail_order
 		instance.Status = SagaStatusFailed
 		instance.CurrentStep = "FAIL_ORDER"
-		e.saveSaga(ctx, instance)
-		e.publishCommand(instance, "fail_order")
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
+		e.logSagaErr(instance.ID, "publishCommand(fail_order)", e.publishCommand(instance, "fail_order"))
 
 	case "complete_order":
 		// Order completion failed, start compensation
 		instance.Status = SagaStatusCompensating
 		instance.CurrentStep = "RELEASE_STOCK"
-		e.saveSaga(ctx, instance)
-		e.publishCommand(instance, "release_stock")
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
+		e.logSagaErr(instance.ID, "publishCommand(release_stock)", e.publishCommand(instance, "release_stock"))
 
 	case "release_stock":
 		// Compensation failed! In a real system, we'd alert or move to a dead-letter queue / retry.
 		// For now, we move to fail_order to ensure order status is updated.
 		log.Printf("Saga Engine: CRITICAL: Compensation RELEASE_STOCK failed for Saga %s", instance.ID)
 		instance.CurrentStep = "FAIL_ORDER"
-		e.saveSaga(ctx, instance)
-		e.publishCommand(instance, "fail_order")
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
+		e.logSagaErr(instance.ID, "publishCommand(fail_order)", e.publishCommand(instance, "fail_order"))
 
 	case "fail_order":
 		// Even failing failed. This is a terminal terminal error.
 		log.Printf("Saga Engine: CRITICAL: Final FAIL_ORDER command failed for Saga %s", instance.ID)
 		instance.Status = SagaStatusFailed
-		e.saveSaga(ctx, instance)
+		e.logSagaErr(instance.ID, "saveSaga", e.saveSaga(ctx, instance))
 	}
 }
 
