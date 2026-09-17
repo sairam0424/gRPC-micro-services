@@ -13,7 +13,7 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
-from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs import LoggerProvider
 from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
 from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -21,12 +21,11 @@ from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session, select, text
-from typing import List
 from pydantic import BaseModel
 
-from app.models import User, engine, init_db, get_session
+from app.models import User, init_db, get_session
 from app.security import get_password_hash, verify_password, create_access_token
 
 # Configure logging

@@ -23,6 +23,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
+
 func initTracer() (*sdktrace.TracerProvider, error) {
 	ctx := context.Background()
 	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -160,7 +161,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create dlq producer: %v", err)
 	}
-	defer dlqProducer.Close()
+	defer func() {
+		if err := dlqProducer.Close(); err != nil {
+			log.Printf("failed to close dlq producer: %v", err)
+		}
+	}()
 
 	consumer, err := kafka.NewConsumer([]string{kafkaBrokers}, "order-events", "order-streamer-group", dlqProducer, schemaRegistryURL)
 	if err != nil {
@@ -193,11 +198,11 @@ func main() {
 			defer cancel()
 			if err := consumer.Ping(ctx); err != nil {
 				w.WriteHeader(http.StatusServiceUnavailable)
-				fmt.Fprintf(w, "kafka connectivity error: %v", err)
+				_, _ = fmt.Fprintf(w, "kafka connectivity error: %v", err)
 				return
 			}
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("healthy"))
+			_, _ = w.Write([]byte("healthy"))
 		})
 		log.Printf("Health check server listening at :8089")
 		if err := http.ListenAndServe(":8089", nil); err != nil {

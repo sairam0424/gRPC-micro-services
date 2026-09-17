@@ -104,7 +104,9 @@ func (g *CommandGateway) Start(ctx context.Context) error {
 }
 
 func (g *CommandGateway) Close() {
-	g.consumer.Close()
+	if err := g.consumer.Close(); err != nil {
+		log.Printf("CommandGateway: error closing consumer: %v", err)
+	}
 	g.producer.Flush(2000)
 	g.producer.Close()
 }

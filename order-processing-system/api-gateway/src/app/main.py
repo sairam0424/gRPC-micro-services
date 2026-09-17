@@ -34,7 +34,7 @@ sys.path.append(GENERATED_DIR)
 
 from order.v1 import order_pb2, order_pb2_grpc
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
-from stream.v1 import stream_pb2, stream_pb2_grpc
+from stream.v1 import stream_pb2_grpc
 
 # Logger
 logger = logging.getLogger(__name__)
@@ -487,7 +487,6 @@ async def list_orders(customer_id: Optional[str] = None, user: dict = Depends(ve
         raise HTTPException(status_code=503, detail=f"Order Service unavailable: {e.details()}")
 
 from .streaming import order_status_streamer
-from fastapi.responses import StreamingResponse
 
 @app.get("/orders/events")
 async def stream_order_updates(

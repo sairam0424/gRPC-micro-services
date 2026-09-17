@@ -15,8 +15,8 @@ import (
 )
 
 type OrderItem struct {
-	ProductID string `json:"product_id"`
-	Quantity  uint32 `json:"quantity"`
+	ProductID  string `json:"product_id"`
+	Quantity   uint32 `json:"quantity"`
 	PriceCents int64  `json:"price_cents"`
 }
 
@@ -58,9 +58,9 @@ func NewConsumer(brokers []string, topic, groupID string, dlqProducer *Producer,
 	}
 
 	return &Consumer{
-		consumer:    c,
-		dlqProducer: dlqProducer,
-		Events:      make(chan OrderEvent, 100),
+		consumer:     c,
+		dlqProducer:  dlqProducer,
+		Events:       make(chan OrderEvent, 100),
 		deserializer: deser,
 	}, nil
 }
@@ -119,7 +119,7 @@ func (c *Consumer) Start(ctx context.Context, topic string) {
 			}
 
 			log.Printf("Received event: %s (Status: %s)", event.OrderID, event.Status)
-			
+
 			select {
 			case c.Events <- event:
 			case <-ctx.Done():
@@ -143,6 +143,8 @@ func (c *Consumer) Ping(ctx context.Context) error {
 }
 
 func (c *Consumer) Close() error {
-	c.deserializer.Close()
+	if err := c.deserializer.Close(); err != nil {
+		log.Printf("Error closing deserializer: %v", err)
+	}
 	return c.consumer.Close()
 }

@@ -1,14 +1,11 @@
 import json
 import logging
-import struct
 import time
-import requests
-from typing import Optional
 from confluent_kafka import Consumer, Producer, KafkaError
 from confluent_kafka.serialization import SerializationContext, MessageField
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from confluent_kafka.schema_registry.protobuf import ProtobufDeserializer, ProtobufSerializer
-from . import crud, schemas
+from . import crud
 from .database import writer_session, reader_sessions
 from .bloom_filter import filter_manager
 from .cache import cache_manager
@@ -17,6 +14,7 @@ from generated.events.v1 import events_pb2
 
 logger = logging.getLogger(__name__)
 
+
 class KafkaManager:
     def __init__(self, brokers, topic_in, topic_out, schema_registry_url, topic_dlq=None):
         self.brokers = brokers
@@ -24,59 +22,47 @@ class KafkaManager:
         self.topic_out = topic_out
         self.topic_dlq = topic_dlq or f"{topic_in}.dlq"
         self.schema_registry_url = schema_registry_url
-        
+
         # Initialize Schema Registry client
-        self.schema_registry_client = SchemaRegistryClient({'url': schema_registry_url})
-        
+        self.schema_registry_client = SchemaRegistryClient({"url": schema_registry_url})
+
         # Initialize Protobuf deserializers for incoming events
-        self.order_created_deserializer = ProtobufDeserializer(
-            events_pb2.OrderCreatedEvent,
-            {'use.deprecated.format': False}
-        )
-        
+        self.order_created_deserializer = ProtobufDeserializer(events_pb2.OrderCreatedEvent, {"use.deprecated.format": False})
+
         self.inventory_updated_deserializer = ProtobufDeserializer(
-            events_pb2.InventoryUpdatedEvent,
-            {'use.deprecated.format': False}
+            events_pb2.InventoryUpdatedEvent, {"use.deprecated.format": False}
         )
-        
+
         self.media_uploaded_deserializer = ProtobufDeserializer(
-            events_pb2.MediaUploadedEvent,
-            {'use.deprecated.format': False}
+            events_pb2.MediaUploadedEvent, {"use.deprecated.format": False}
         )
-        
+
         # Initialize Protobuf serializer for outgoing events
         self.inventory_reserved_serializer = ProtobufSerializer(
-            events_pb2.InventoryReservedEvent,
-            self.schema_registry_client,
-            {'use.deprecated.format': False}
+            events_pb2.InventoryReservedEvent, self.schema_registry_client, {"use.deprecated.format": False}
         )
-        
+
         self.inventory_failed_serializer = ProtobufSerializer(
-            events_pb2.InventoryFailedEvent,
-            self.schema_registry_client,
-            {'use.deprecated.format': False}
+            events_pb2.InventoryFailedEvent, self.schema_registry_client, {"use.deprecated.format": False}
         )
-        
+
         self.inventory_updated_serializer = ProtobufSerializer(
-            events_pb2.InventoryUpdatedEvent,
-            self.schema_registry_client,
-            {'use.deprecated.format': False}
+            events_pb2.InventoryUpdatedEvent, self.schema_registry_client, {"use.deprecated.format": False}
         )
-        
+
         # Initialize Consumer
-        self.consumer = Consumer({
-            'bootstrap.servers': brokers,
-            'group.id': 'inventory-service-group',
-            'auto.offset.reset': 'earliest',
-            'enable.auto.commit': False
-        })
-        
+        self.consumer = Consumer(
+            {
+                "bootstrap.servers": brokers,
+                "group.id": "inventory-service-group",
+                "auto.offset.reset": "earliest",
+                "enable.auto.commit": False,
+            }
+        )
+
         # Initialize Producer
-        self.producer = Producer({
-            'bootstrap.servers': brokers,
-            'client.id': 'inventory-service-producer'
-        })
-        
+        self.producer = Producer({"bootstrap.servers": brokers, "client.id": "inventory-service-producer"})
+
         self.running = False
 
     def start(self):
@@ -85,44 +71,44 @@ class KafkaManager:
         topics = [self.topic_in, "media.events"]
         self.consumer.subscribe(topics)
         logger.info(f"Kafka Manager started, subscribed to {topics}")
-        
+
         try:
             while self.running:
                 msg = self.consumer.poll(timeout=1.0)
-                
+
                 if msg is None:
                     continue
-                    
+
                 if msg.error():
                     if msg.error().code() == KafkaError._PARTITION_EOF:
                         continue
                     else:
                         logger.error(f"Consumer error: {msg.error()}")
                         continue
-                
+
                 try:
                     # Deserialize Protobuf message
                     event = self._deserialize_event(msg)
-                    
+
                     if event:
                         logger.info(f"Received event: {event.event_type} for order {event.order_id}")
-                        
+
                         if event.event_type == "order.created":
                             self._handle_order_created_sync(event)
                         elif event.event_type == "inventory.updated":
                             self._handle_inventory_updated_sync(event)
                         elif event.event_type == "media.uploaded":
                             self._handle_media_uploaded_sync(event)
-                        
+
                         # Manual Commit after successful sync handling
                         self.consumer.commit(asynchronous=False)
-                            
+
                 except Exception as e:
                     logger.error(f"Error processing message: {e}")
                     self._publish_to_dlq_sync(msg.value(), str(e))
                     # Commit even if sent to DLQ to avoid re-processing
                     self.consumer.commit(asynchronous=False)
-                    
+
         except Exception as e:
             logger.error(f"Fatal error in consume loop: {e}")
         finally:
@@ -141,40 +127,34 @@ class KafkaManager:
         """Deserialize Confluent wire format Protobuf message using official deserializer"""
         if msg is None or msg.value() is None:
             return None
-            
+
         try:
             # Try to deserialize as OrderCreatedEvent first
             try:
-                event = self.order_created_deserializer(
-                    msg.value(), 
-                    SerializationContext(msg.topic(), MessageField.VALUE)
-                )
+                event = self.order_created_deserializer(msg.value(), SerializationContext(msg.topic(), MessageField.VALUE))
                 return event
             except Exception:
                 # Fallback: Try MediaUploadedEvent
                 try:
                     event = self.media_uploaded_deserializer(
-                        msg.value(),
-                        SerializationContext(msg.topic(), MessageField.VALUE)
+                        msg.value(), SerializationContext(msg.topic(), MessageField.VALUE)
                     )
                     return event
                 except Exception:
                     # Final fallback: Try raw JSON (for media-service compatibility)
                     try:
-                        data = json.loads(msg.value().decode('utf-8'))
+                        data = json.loads(msg.value().decode("utf-8"))
                         if data.get("event_type") == "media.uploaded":
                             # Map JSON to Protobuf-like object for handler consistency
                             from types import SimpleNamespace
+
                             return SimpleNamespace(**data)
                     except Exception as json_e:
                         logger.debug(f"JSON fallback failed: {json_e}")
-                    
-                event = self.inventory_updated_deserializer(
-                    msg.value(),
-                    SerializationContext(msg.topic(), MessageField.VALUE)
-                )
+
+                event = self.inventory_updated_deserializer(msg.value(), SerializationContext(msg.topic(), MessageField.VALUE))
                 return event
-            
+
         except Exception as e:
             logger.error(f"Failed to deserialize event: {e}")
             return None
@@ -182,6 +162,7 @@ class KafkaManager:
     def _handle_order_created_sync(self, event):
         """Handle order.created event synchronously"""
         import asyncio
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -192,6 +173,7 @@ class KafkaManager:
     def _handle_inventory_updated_sync(self, event):
         """Handle inventory.updated event synchronously"""
         import asyncio
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -202,6 +184,7 @@ class KafkaManager:
     def _handle_media_uploaded_sync(self, event):
         """Handle media.uploaded event synchronously"""
         import asyncio
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -215,13 +198,10 @@ class KafkaManager:
             "original_event": original_msg.hex(),
             "error": error,
             "service": "inventory-service",
-            "retry_exhausted": True
+            "retry_exhausted": True,
         }
         try:
-            self.producer.produce(
-                self.topic_dlq,
-                value=json.dumps(dlq_event).encode('utf-8')
-            )
+            self.producer.produce(self.topic_dlq, value=json.dumps(dlq_event).encode("utf-8"))
             self.producer.flush()
             logger.warning(f"Message sent to DLQ {self.topic_dlq}")
         except Exception as e:
@@ -230,11 +210,10 @@ class KafkaManager:
     async def handle_order_created(self, event):
         """Handle order.created event"""
         order_id = event.order_id
-        customer_id = event.customer_id
         items = event.items
-        
+
         req_items = [ItemReq(item.product_id, item.quantity) for item in items]
-        
+
         # Tier-2 Bloom Filter Check
         for item in req_items:
             if not filter_manager.is_in_stock(item.product_id):
@@ -258,12 +237,12 @@ class KafkaManager:
 
             try:
                 success, message, response_items = await crud.reserve_stock_atomic(session, order_id, req_items)
-                
+
                 if success:
                     await self._publish_inventory_reserved(event, message)
                 else:
                     await self._publish_inventory_failed(event, message)
-                    
+
             except Exception as e:
                 logger.error(f"Error handling order.created: {e}")
                 await self._publish_inventory_failed(event, str(e))
@@ -278,21 +257,19 @@ class KafkaManager:
             status="PROCESSING",
             message=message,
             items=original_event.items,
-            timestamp=int(time.time() * 1000)
+            timestamp=int(time.time() * 1000),
         )
-        
-        serialized = self.inventory_reserved_serializer(
-            event,
-            SerializationContext(self.topic_out, MessageField.VALUE)
-        )
-        
-        self.producer.produce(self.topic_out, value=serialized, key=original_event.order_id.encode('utf-8'))
+
+        serialized = self.inventory_reserved_serializer(event, SerializationContext(self.topic_out, MessageField.VALUE))
+
+        self.producer.produce(self.topic_out, value=serialized, key=original_event.order_id.encode("utf-8"))
         self.producer.flush()
         logger.info(f"Published inventory.reserved for order {original_event.order_id}")
 
     async def _publish_inventory_failed(self, original_event, message):
         """Publish inventory.failed event"""
         import time
+
         event = events_pb2.InventoryFailedEvent(
             event_id=f"inv_failed_{original_event.order_id}",
             event_type="inventory.failed",
@@ -301,22 +278,19 @@ class KafkaManager:
             status="FAILED",
             message=message,
             items=original_event.items,
-            timestamp=int(time.time() * 1000)
+            timestamp=int(time.time() * 1000),
         )
-        
-        serialized = self.inventory_failed_serializer(
-            event,
-            SerializationContext(self.topic_out, MessageField.VALUE)
-        )
-        
-        self.producer.produce(self.topic_out, value=serialized, key=original_event.order_id.encode('utf-8'))
+
+        serialized = self.inventory_failed_serializer(event, SerializationContext(self.topic_out, MessageField.VALUE))
+
+        self.producer.produce(self.topic_out, value=serialized, key=original_event.order_id.encode("utf-8"))
         self.producer.flush()
         logger.info(f"Published inventory.failed for order {original_event.order_id}")
 
     async def handle_inventory_updated(self, event):
         """Handle inventory.updated event"""
         event_id = event.event_id or f"inv_upd_{event.product_id}_{event.quantity}"
-        
+
         async with writer_session() as session:
             if not await crud.check_and_record_event(session, event_id, "inventory-service"):
                 logger.info(f"Duplicate inventory update ignored: {event_id}")
@@ -325,12 +299,12 @@ class KafkaManager:
 
         product_id = event.product_id
         quantity = event.quantity
-        
+
         if product_id and quantity is not None:
             logger.info(f"Event-driven Cache Refresh: {product_id} = {quantity}")
             cache_manager.set_stock(product_id, quantity)
             filter_manager.update_stock_status(product_id, quantity > 0)
-            
+
             # Async Replication to Replica 2
             async with reader_sessions["replica2"]() as session:
                 try:
@@ -343,9 +317,9 @@ class KafkaManager:
 
     async def handle_media_uploaded(self, event):
         """Handle media.uploaded event to associate media with entities"""
-        media_id = getattr(event, 'media_id', None)
-        entity_type = getattr(event, 'entity_type', None)
-        entity_id = getattr(event, 'entity_id', None)
+        media_id = getattr(event, "media_id", None)
+        entity_type = getattr(event, "entity_type", None)
+        entity_id = getattr(event, "entity_id", None)
 
         if not all([media_id, entity_type, entity_id]):
             logger.warning(f"Incomplete media.uploaded event: {event}")

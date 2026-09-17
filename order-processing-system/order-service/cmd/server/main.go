@@ -15,6 +15,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/sairam0424/gRPC-micro-services/order-service/internal/client/inventory"
@@ -272,7 +273,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create inventory client: %v", err)
 	}
-	defer invClient.Close()
+	defer func() {
+		if err := invClient.Close(); err != nil {
+			log.Printf("failed to close inventory client: %v", err)
+		}
+	}()
 
 	database.InitDB()
 
@@ -280,25 +285,37 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to create kafka producer: %v", err)
 	}
-	defer producer.Close()
+	defer func() {
+		if err := producer.Close(); err != nil {
+			log.Printf("failed to close kafka producer: %v", err)
+		}
+	}()
 
 	consumer, err := kafka.NewOrderConsumer([]string{kafkaBrokers}, "inventory-events", "order-service-group", producer, schemaRegistryURL)
 	if err != nil {
 		log.Fatalf("failed to create kafka consumer: %v", err)
 	}
 	go consumer.Start(context.Background(), "inventory-events")
-	defer consumer.Close()
+	defer func() {
+		if err := consumer.Close(); err != nil {
+			log.Printf("failed to close kafka consumer: %v", err)
+		}
+	}()
 
 	sagaAddr := os.Getenv("SAGA_ORCHESTRATOR_ADDR")
 	if sagaAddr == "" {
 		sagaAddr = "saga-orchestrator:50054"
 	}
 
-	sagaConn, err := grpc.Dial(sagaAddr, grpc.WithInsecure())
+	sagaConn, err := grpc.NewClient(sagaAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("failed to connect to saga orchestrator: %v", err)
 	}
-	defer sagaConn.Close()
+	defer func() {
+		if err := sagaConn.Close(); err != nil {
+			log.Printf("failed to close saga orchestrator connection: %v", err)
+		}
+	}()
 	sagaClient := sagav1.NewSagaServiceClient(sagaConn)
 
 	lis, err := net.Listen("tcp", ":50051")
@@ -346,7 +363,11 @@ func main() {
 	}
 
 	go func() {
-		defer c.Close()
+		defer func() {
+			if err := c.Close(); err != nil {
+				log.Printf("failed to close saga command consumer: %v", err)
+			}
+		}()
 		defer p.Close()
 		for {
 			select {
@@ -407,7 +428,7 @@ func main() {
 				w.WriteHeader(http.StatusOK)
 			}
 
-			fmt.Fprintf(w, `{"status": "%s", "version": "0.1.0", "checks": {"database": "%s", "kafka": "%s"}}`, status, dbStatus, kafkaStatus)
+			_, _ = fmt.Fprintf(w, `{"status": "%s", "version": "0.1.0", "checks": {"database": "%s", "kafka": "%s"}}`, status, dbStatus, kafkaStatus)
 		})
 		log.Printf("Health check server listening at :8088")
 		if err := http.ListenAndServe(":8088", mux); err != nil {

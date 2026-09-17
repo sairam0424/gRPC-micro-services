@@ -1,0 +1,46 @@
+# Official Go vulnerability scanner, run per Go module (this is a
+# multi-module monorepo with no root go.mod). Matrix mirrors go.yml's
+# module list.
+# For more information see: https://go.dev/blog/govulncheck
+
+name: govulncheck
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  schedule:
+    # Weekly, to catch newly disclosed CVEs in already-vendored dependency
+    # versions that wouldn't otherwise trigger a push/PR.
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+jobs:
+  govulncheck:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - order-processing-system/order-service
+          - order-processing-system/order-streamer
+          - order-processing-system/saga-orchestrator
+          - order-processing-system/infra/replay-service
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version: 'stable'
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Run govulncheck
+        working-directory: ${{ matrix.module }}
+        run: govulncheck ./...

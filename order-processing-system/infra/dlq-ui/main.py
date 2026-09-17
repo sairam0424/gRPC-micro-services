@@ -4,7 +4,6 @@ from fastapi.templating import Jinja2Templates
 from aiokafka import AIOKafkaConsumer
 import os
 import json
-import asyncio
 import logging
 
 app = FastAPI(title="Kafka DLQ UI")

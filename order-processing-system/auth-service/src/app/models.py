@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Optional
 from sqlmodel import Field, SQLModel, create_engine, Session
-from sqlalchemy.pool import NullPool
 import os
 
 class User(SQLModel, table=True):

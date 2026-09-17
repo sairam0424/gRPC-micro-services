@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from contextlib import asynccontextmanager
 
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
 from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 def get_connect_args(url: str):
@@ -112,5 +111,4 @@ get_db = get_reader_db
 
 async def init_db():
     async with writer_engine.begin() as conn:
-        from . import models
         await conn.run_sync(Base.metadata.create_all)
