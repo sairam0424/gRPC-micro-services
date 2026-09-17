@@ -2,7 +2,7 @@ import os
 import redis
 import time
 import logging
-from typing import Optional, Tuple
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 

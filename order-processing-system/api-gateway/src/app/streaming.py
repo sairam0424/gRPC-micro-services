@@ -3,7 +3,6 @@ import json
 import grpc
 import os
 import sys
-from fastapi.responses import StreamingResponse
 from typing import AsyncGenerator
 
 # Ensure generated code is in the path

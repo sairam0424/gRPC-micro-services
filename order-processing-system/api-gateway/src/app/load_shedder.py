@@ -1,7 +1,6 @@
 import logging
-import os
 import redis
-from typing import Dict, List, Set, Optional
+from typing import Set, Optional
 
 logger = logging.getLogger(__name__)
 
