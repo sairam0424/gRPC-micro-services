@@ -80,7 +80,7 @@ func (p *Producer) PublishOrderEvent(ctx context.Context, event *eventsv1.OrderC
 
 func (p *Producer) Close() error {
 	p.producer.Flush(5000)
-	p.serializer.Close()
+	err := p.serializer.Close()
 	p.producer.Close()
-	return nil
+	return err
 }

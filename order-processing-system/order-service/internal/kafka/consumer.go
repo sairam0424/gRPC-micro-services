@@ -74,7 +74,7 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 			// Generic event type check
 			// We can try to peek the event type or use a generic proto message
 			// For simplicity, we'll try to deserialize into different types
-			
+
 			if msg.TopicPartition.Topic != nil && *msg.TopicPartition.Topic == "media.events" {
 				mediaEvent := &eventsv1.MediaUploadedEvent{}
 				err = c.deserializer.DeserializeInto(*msg.TopicPartition.Topic, msg.Value, mediaEvent)
@@ -90,7 +90,9 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 							log.Printf("Error handling media event: %v", err)
 						}
 					}
-					c.consumer.CommitMessage(msg)
+					if _, err := c.consumer.CommitMessage(msg); err != nil {
+						log.Printf("Error committing message: %v", err)
+					}
 					continue
 				}
 			}
@@ -118,7 +120,7 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 			}
 
 			// Handle different event types
-			err = database.DB.Transaction(func(tx *gorm.DB) error {
+			if txErr := database.DB.Transaction(func(tx *gorm.DB) error {
 				if !database.CheckAndRecordEvent(tx, event.EventId, "order-service") {
 					log.Printf("Duplicate event ignored: %s", event.EventId)
 					return nil
@@ -131,7 +133,9 @@ func (c *OrderConsumer) Start(ctx context.Context, topic string) {
 					c.handleInventoryFailed(tx, event)
 				}
 				return nil
-			})
+			}); txErr != nil {
+				log.Printf("Error processing event %s: %v", event.EventId, txErr)
+			}
 		}
 	}
 }
@@ -209,6 +213,8 @@ func (c *OrderConsumer) publishOrderUpdate(event *eventsv1.InventoryReservedEven
 }
 
 func (c *OrderConsumer) Close() error {
-	c.deserializer.Close()
+	if err := c.deserializer.Close(); err != nil {
+		log.Printf("Error closing deserializer: %v", err)
+	}
 	return c.consumer.Close()
 }
