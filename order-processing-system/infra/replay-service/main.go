@@ -47,7 +47,7 @@ func main() {
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("OK"))
+	_, _ = w.Write([]byte("OK"))
 }
 
 func handleReplay(w http.ResponseWriter, r *http.Request) {
@@ -80,18 +80,22 @@ func handleReplay(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Replay failed: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(ReplayResponse{
+		if encErr := json.NewEncoder(w).Encode(ReplayResponse{
 			Status:  "error",
 			Message: err.Error(),
-		})
+		}); encErr != nil {
+			log.Printf("Failed to encode error response: %v", encErr)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ReplayResponse{
+	if encErr := json.NewEncoder(w).Encode(ReplayResponse{
 		Status: "success",
 		Count:  count,
-	})
+	}); encErr != nil {
+		log.Printf("Failed to encode success response: %v", encErr)
+	}
 }
 
 func performReplay(brokers, source, target string) (int, error) {
@@ -103,14 +107,22 @@ func performReplay(brokers, source, target string) (int, error) {
 		GroupID:     fmt.Sprintf("replay-group-%d", time.Now().Unix()),
 		StartOffset: kafka.FirstOffset,
 	})
-	defer reader.Close()
+	defer func() {
+		if err := reader.Close(); err != nil {
+			log.Printf("Failed to close reader: %v", err)
+		}
+	}()
 
 	writer := &kafka.Writer{
 		Addr:     kafka.TCP(brokers),
 		Topic:    target,
 		Balancer: &kafka.LeastBytes{},
 	}
-	defer writer.Close()
+	defer func() {
+		if err := writer.Close(); err != nil {
+			log.Printf("Failed to close writer: %v", err)
+		}
+	}()
 
 	count := 0
 	// Use a shorter timeout to detect end of topic
@@ -150,4 +162,3 @@ func performReplay(brokers, source, target string) (int, error) {
 
 	return count, nil
 }
-
