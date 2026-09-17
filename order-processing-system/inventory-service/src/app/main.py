@@ -21,18 +21,17 @@ from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.instrumentation.grpc import GrpcInstrumentorServer, GrpcInstrumentorClient
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
-from concurrent import futures
 import grpc
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, text
+from sqlalchemy import select, text
 
 # Ensure generated code is in the path
 GENERATED_DIR = os.path.join(os.path.dirname(__file__), "..", "generated")
 sys.path.append(GENERATED_DIR)
 
 from inventory.v1 import inventory_pb2, inventory_pb2_grpc
-from app.database import init_db, get_db, writer_session, reader_sessions
+from app.database import init_db, get_db, writer_session
 from app.models import InventoryItem
 from app.bloom_filter import filter_manager
 from app.cache import cache_manager

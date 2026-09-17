@@ -1,10 +1,9 @@
 import json
 import logging
 import asyncio
-import threading
 import time
 from confluent_kafka import Consumer, Producer, KafkaError
-from . import crud, schemas
+from . import crud
 from .database import writer_session
 from .schemas import ItemReq
 
