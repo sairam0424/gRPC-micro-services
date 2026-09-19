@@ -1,13 +1,13 @@
 module github.com/sairam0424/gRPC-micro-services/saga-orchestrator
 
-go 1.25.4
+go 1.26.0
 
 require (
 	github.com/confluentinc/confluent-kafka-go/v2 v2.13.0
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/stretchr/testify v1.12.1
-	go.temporal.io/api v1.63.4
-	go.temporal.io/sdk v1.48.0
+	go.temporal.io/api v1.63.5
+	go.temporal.io/sdk v1.49.0
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 )
