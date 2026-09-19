@@ -3,7 +3,7 @@ module github.com/sairam0424/gRPC-micro-services/order-service
 go 1.25.4
 
 require (
-	github.com/confluentinc/confluent-kafka-go/v2 v2.15.0
+	github.com/confluentinc/confluent-kafka-go/v2 v2.15.1
 	github.com/sairam0424/gRPC-micro-services/saga-orchestrator v0.0.0-00010101000000-000000000000
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.70.0
 	go.opentelemetry.io/otel v1.46.0
