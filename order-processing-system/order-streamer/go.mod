@@ -1,6 +1,6 @@
 module github.com/sairam0424/gRPC-micro-services/order-streamer
 
-go 1.25.0
+go 1.26.0
 
 require (
 	github.com/confluentinc/confluent-kafka-go/v2 v2.15.0
@@ -8,11 +8,12 @@ require (
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.45.0
 	go.opentelemetry.io/otel/sdk v1.46.0
-	google.golang.org/grpc v1.83.2
+	google.golang.org/grpc v1.84.0
 	google.golang.org/protobuf v1.36.12
 )
 
 require (
+	cloud.google.com/go/auth/oauth2adapt v0.3.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.22.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.14.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.12.0 // indirect
